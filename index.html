@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="제천시 대형폐기물 배출신고 시범 화면" />
+    <title>제천시 대형폐기물 배출신고</title>
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  </head>
+  <body>
+    <a class="skip-link" href="#report-form">신고 작성으로 바로가기</a>
+    <div class="app-shell">
+      <header class="topbar">
+        <a class="brand" href="#top" aria-label="제천시 대형폐기물 배출신고 첫 화면">
+          <span class="brand-mark" aria-hidden="true">제</span>
+          <span>대형폐기물</span>
+        </a>
+        <a class="topbar-help" href="#help" aria-label="도움말">
+          <svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.3 9a2.7 2.7 0 1 1 3.6 2.5c-1 .4-1.6 1.2-1.6 2.3v.3" /><circle cx="12" cy="17.2" r=".6" fill="currentColor" stroke="none" /></svg>
+        </a>
+      </header>
+
+      <main id="top">
+        <section class="hero" aria-labelledby="intro-title">
+          <h1 id="intro-title">버릴 물건 고르고,<br /><em>정확한 장소</em>만 알려주세요</h1>
+          <p class="hero-copy">스티커 사러 갈 필요 없이, 품목과 배출 위치를 입력하면 담당자가 수거 과정을 안내해요. 신고는 약 3분이면 끝나요.</p>
+
+          <aside class="guide-card">
+            <span class="icon" aria-hidden="true">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9" /><line x1="12" y1="11" x2="12" y2="16.2" /><circle cx="12" cy="7.6" r=".6" fill="currentColor" stroke="none" /></svg>
+            </span>
+            <div>
+              <strong>신고필증 대신 접수번호를 보여주세요.</strong>
+              <small>수거일 오전에는 배출 장소를 한 번 더 확인해 주세요.</small>
+            </div>
+          </aside>
+
+          <div class="notice-pill">
+            <span class="icon" aria-hidden="true">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9" /><line x1="12" y1="11" x2="12" y2="16.2" /><circle cx="12" cy="7.6" r=".6" fill="currentColor" stroke="none" /></svg>
+            </span>
+            <p><strong>시범 화면이에요.</strong> 품목과 수수료는 예시이며, 운영 시 제천시 확정 수수료표를 적용해요.</p>
+          </div>
+        </section>
+
+        <ol class="progress-steps" aria-label="신고 절차" id="progress-steps">
+          <li class="is-current" data-step="1"><span>1</span>품목</li>
+          <li data-step="2"><span>2</span>위치</li>
+          <li data-step="3"><span>3</span>결제</li>
+        </ol>
+
+        <form id="report-form" novalidate>
+          <!-- STEP 1: 품목 선택 -->
+          <section class="form-section form-step active" id="step-1" aria-labelledby="item-title">
+            <div class="section-head">
+              <h2 id="item-title">무엇을 버리시나요?</h2>
+              <p>분류를 고르거나 품목명을 검색하세요.</p>
+            </div>
+
+            <label class="search-box" for="item-search">
+              <span class="icon" aria-hidden="true">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7" /><line x1="21" y1="21" x2="16.6" y2="16.6" /></svg>
+              </span>
+              <input id="item-search" type="search" placeholder="예: 소파, 침대, 전자레인지" autocomplete="off" />
+            </label>
+
+            <div class="quick-chips" aria-label="자주 찾는 품목">
+              <span class="quick-chip-label">자주 찾는 품목</span>
+              <button type="button" class="quick-chip" data-quick="소파">🛋 소파</button>
+              <button type="button" class="quick-chip" data-quick="침대">🛏 침대</button>
+              <button type="button" class="quick-chip" data-quick="매트리스">🪑 매트리스</button>
+              <button type="button" class="quick-chip" data-quick="책상">🖥 책상</button>
+              <button type="button" class="quick-chip" data-quick="서랍장">🗄 서랍장</button>
+              <button type="button" class="quick-chip" data-quick="자전거">🚲 자전거</button>
+            </div>
+
+            <div class="category-grid" id="category-grid" aria-label="대형폐기물 분류"></div>
+            <div class="item-panel">
+              <div class="panel-title-row">
+                <h3 id="item-list-title">거실·침실 가구</h3>
+                <span id="item-count">0개 품목</span>
+              </div>
+              <div class="item-list" id="item-list" aria-live="polite"></div>
+            </div>
+
+            <div class="selection-card" id="selection-card" hidden>
+              <div>
+                <p class="selection-label">선택한 품목</p>
+                <strong id="selected-item-name"></strong>
+                <span id="selected-item-detail"></span>
+              </div>
+              <div class="selection-controls" id="selection-controls">
+                <label>규격
+                  <select id="item-option"></select>
+                </label>
+                <label>수량
+                  <select id="item-quantity">
+                    <option value="1">1개</option><option value="2">2개</option><option value="3">3개</option><option value="4">4개</option><option value="5">5개</option>
+                  </select>
+                </label>
+                <button class="button secondary" id="add-item" type="button">신고 목록에 추가</button>
+              </div>
+            </div>
+
+            <aside class="disposal-guide" id="disposal-guide" aria-live="polite" hidden></aside>
+
+            <div class="cart" id="cart" aria-live="polite">
+              <p class="empty-cart">아직 선택한 품목이 없어요.</p>
+            </div>
+
+            <div class="step-nav-row">
+              <button class="button primary" type="button" id="step1-next-btn">다음: 배출 위치 입력 ›</button>
+            </div>
+          </section>
+
+          <!-- STEP 2: 배출 위치 -->
+          <section class="form-section location-section form-step" id="step-2" aria-labelledby="location-title">
+            <div class="section-head">
+              <h2 id="location-title">어디에 배출하시나요?</h2>
+              <p>수거자가 찾기 쉬운 장소를 입력해 주세요.</p>
+            </div>
+            <div class="location-layout">
+              <div class="address-fields">
+                <label>배출 주소
+                  <input id="address" type="text" placeholder="예: 제천시 의림대로 00" required />
+                </label>
+                <label>상세 배출 장소
+                  <input id="address-detail" type="text" placeholder="예: 101동 출입구 옆 분리수거장" required />
+                </label>
+                <div class="map-actions"><button class="button location-button" id="open-address-map" type="button">주소로 지도에서 확인</button><button class="button location-button" id="get-location" type="button">현재 위치로 배출지점 확인</button></div>
+                <p class="field-help" id="location-result">주소로 신고지점을 먼저 확인한 뒤, 현장에서는 현재 위치로 다시 대조할 수 있어요.</p>
+
+                <div class="photo-field">
+                  <p class="photo-field-label">배출 위치 사진 <span class="optional-tag">선택</span></p>
+                  <p class="field-help">건물 정면이 보이도록 찍어주시면 담당자가 위치를 더 빠르게 찾을 수 있어요. 수거가 끝나면 같은 위치에서 찍은 완료 사진을 접수번호로 확인할 수 있어요.</p>
+                  <input id="before-photo-input" type="file" accept="image/*" capture="environment" hidden />
+                  <button class="button outline" type="button" id="before-photo-button">사진 촬영·첨부하기</button>
+                  <div class="photo-preview" id="before-photo-preview" hidden>
+                    <img id="before-photo-img" alt="배출 위치 사진 미리보기" />
+                    <button type="button" id="before-photo-remove" aria-label="사진 삭제">×</button>
+                  </div>
+                  <p class="form-message" id="before-photo-message" role="status"></p>
+                </div>
+              </div>
+              <div class="map-preview">
+                <div id="report-map" class="report-map" aria-label="배출 위치 지도"></div>
+                <div class="map-preview-caption">
+                  <strong id="map-title">배출 위치 확인</strong>
+                  <small id="map-status">현재 위치 확인을 누르면 지도에 배출지점이 표시돼요.</small>
+                </div>
+              </div>
+            </div>
+            <div class="step-nav-row">
+              <button class="button outline" type="button" id="step2-prev-btn">‹ 이전: 품목 수정</button>
+              <button class="button primary" type="button" id="step2-next-btn">다음: 결제 방법 선택 ›</button>
+            </div>
+          </section>
+
+          <!-- STEP 3: 결제 및 확인 -->
+          <section class="form-section form-step" id="step-3" aria-labelledby="payment-title">
+            <div class="section-head">
+              <h2 id="payment-title">결제 방법을 선택하세요.</h2>
+              <p>결제 완료 후 수거 배정이 진행돼요.</p>
+            </div>
+            <fieldset class="payment-options">
+              <legend class="sr-only">결제 방법</legend>
+              <p class="selection-label payment-group-label">간편결제</p>
+              <label class="payment-option"><input type="radio" name="payment" value="kakaopay" checked /><span><b>카카오페이</b><small>카카오페이 앱으로 바로 결제해요.</small></span></label>
+              <label class="payment-option"><input type="radio" name="payment" value="naverpay" /><span><b>네이버페이</b><small>네이버페이 포인트·카드로 결제해요.</small></span></label>
+              <label class="payment-option"><input type="radio" name="payment" value="tosspay" /><span><b>토스</b><small>토스 앱으로 바로 결제해요.</small></span></label>
+              <p class="selection-label payment-group-label">일반결제</p>
+              <label class="payment-option"><input type="radio" name="payment" value="card" /><span><b>카드결제</b><small>카드로 바로 결제해요.</small></span></label>
+              <label class="payment-option"><input type="radio" name="payment" value="transfer" /><span><b>계좌이체</b><small>실시간 이체 또는 가상계좌를 이용해요.</small></span></label>
+              <label class="payment-option"><input type="radio" name="payment" value="cash" /><span><b>현금결제</b><small>지정 수납처 납부 후 확인해요.</small></span></label>
+            </fieldset>
+            <div class="payment-notice" id="payment-notice" role="status"></div>
+            <aside class="settlement-notice"><strong>현장 확인과 추가요금 안내</strong><p>현장 확인 결과 신고하지 않은 품목이 있거나 품목의 규격·수량·배출 위치가 신고 내용과 다른 경우 추가요금이 발생할 수 있어요. 추가요금은 담당자가 안내한 뒤 별도로 결제하며, 사전 동의 없이 자동 결제되지 않아요.</p></aside>
+            <div class="step-nav-row">
+              <button class="button outline" type="button" id="step3-prev-btn">‹ 이전: 위치 수정</button>
+              <button class="button primary" type="submit" id="step3-submit-btn">신고 접수 및 결제하기</button>
+            </div>
+          </section>
+
+          <p class="form-message" id="form-message" role="status"></p>
+
+          <div class="checkout-bar" id="checkout-bar">
+            <div class="checkout-bar-inner">
+              <div>
+                <p>예상 수수료</p>
+                <strong id="total-fee">0원</strong>
+              </div>
+              <button class="button primary" type="button" id="checkout-step-btn">다음 단계로 이동 ›</button>
+            </div>
+          </div>
+        </form>
+
+        <!-- 접수 완료 접수증 카드 -->
+        <div class="receipt-card" id="receipt-card" hidden>
+          <div class="receipt-badge">신고 접수 완료</div>
+          <h3 class="receipt-title">대형폐기물 배출신고가 접수되었습니다!</h3>
+          <div class="receipt-number-box">
+            <small>나의 접수번호</small>
+            <strong id="receipt-no">JC-00000000-000000</strong>
+            <button type="button" class="copy-btn" id="copy-receipt-no">접수번호 복사</button>
+          </div>
+          <div class="receipt-guide">
+            <strong>🏷 스티커를 사러 갈 필요가 없어요!</strong>
+            <p>빈 종이에 위 <b>접수번호</b>와 <b>품목명</b>을 굵은 펜으로 적어 폐기물에 잘 보이게 부착해 주세요. 수거 담당자가 번호를 확인하고 수거를 진행합니다.</p>
+          </div>
+          <div class="receipt-guide cash-guide" id="receipt-cash-guide" hidden></div>
+          <div class="receipt-summary" id="receipt-summary"></div>
+          <div class="receipt-actions">
+            <button type="button" class="button secondary" id="receipt-lookup-btn">수거 처리 현황 바로 확인하기</button>
+            <button type="button" class="button outline" id="receipt-new-btn">새로운 신고 작성하기</button>
+          </div>
+        </div>
+
+        <section class="lookup-section" aria-labelledby="lookup-title">
+          <div class="section-head">
+            <h2 id="lookup-title">내 신고 확인하기</h2>
+            <p>접수번호를 입력하면 처리 상태와 수거 완료 사진을 확인할 수 있어요.</p>
+          </div>
+          <div class="lookup-box">
+            <input id="lookup-input" type="text" placeholder="예: JC-20260730-014" autocomplete="off" />
+            <button class="button secondary" type="button" id="lookup-button">확인</button>
+          </div>
+          <div id="lookup-result" aria-live="polite"></div>
+        </section>
+      </main>
+      <footer id="help">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+          <div><strong>제천시 자원순환과</strong> <span>대형폐기물 신고 도움말 043-641-6423</span></div>
+          <div style="font-size:12px; opacity:0.85;">
+            <a href="/staff.html" style="color:inherit; text-decoration:underline; margin-right:12px;">접수 담당자 대시보드</a>
+            <a href="/tablet.html" style="color:inherit; text-decoration:underline;">현장 수거 화면</a>
+          </div>
+        </div>
+      </footer>
+    </div>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <script src="photo.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>

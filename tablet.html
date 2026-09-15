@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="theme-color" content="#192a24" />
+    <meta name="description" content="제천시 대형폐기물 현장 수거 전용 태블릿 시스템" />
+    <title>제천시 대형폐기물 현장 수거 태블릿</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    <link rel="stylesheet" href="tablet.css" />
+  </head>
+  <body class="tablet-body">
+    <!-- 상단 헤더 바 -->
+    <header class="tablet-header">
+      <div class="tablet-brand">
+        <span class="brand-badge">제천시 현장</span>
+        <span class="brand-title">대형폐기물 수거 태블릿</span>
+        <button type="button" class="tablet-assignee-pill" id="btn-device-setting" aria-label="기기 담당자 변경">
+          <span id="assignee-icon">🚜</span>
+          <span id="assignee-name-display">담당자 설정 중…</span>
+          <span class="change-hint">변경</span>
+        </button>
+      </div>
+
+      <div class="tablet-header-tools">
+        <span class="sync-time" id="sync-time-display">동기화 대기</span>
+        <button type="button" class="tablet-btn-tool" id="btn-refresh" title="수거 목록 새로고침">🔄 새로고침</button>
+        <button type="button" class="tablet-btn-tool" id="btn-contrast" title="야외 직사광선 고대비 모드">☀️ 고대비</button>
+        <button type="button" class="tablet-btn-tool" id="btn-voice" title="음성 안내 ON/OFF">🔊 음성 켜짐</button>
+        <button type="button" class="tablet-btn-tool" id="btn-fullscreen" title="전체화면 전환">⛶ 전체화면</button>
+        <a href="staff.html" class="tablet-btn-tool" title="접수·관리자 대시보드" style="text-decoration:none;">🖥️ 접수처</a>
+      </div>
+    </header>
+
+    <!-- 메인 2열 분할 작업 공간 -->
+    <main class="tablet-workspace">
+      <!-- 좌측 패널: 오늘 수거 목록 & 진행률 -->
+      <aside class="tablet-sidebar">
+        <div class="progress-banner" id="today-progress-card">
+          <div class="progress-meta">
+            <h2>오늘의 수거 현황</h2>
+            <span class="progress-count" id="progress-text">0 / 0건 (0%)</span>
+          </div>
+          <div class="progress-bar-track">
+            <div class="progress-bar-fill" id="progress-bar-fill"></div>
+          </div>
+        </div>
+
+        <div class="list-filter-bar">
+          <div class="filter-tabs">
+            <button type="button" class="filter-tab active" data-filter="PENDING">미완료 <b id="count-pending">0</b></button>
+            <button type="button" class="filter-tab" data-filter="COLLECTED">완료 <b id="count-collected">0</b></button>
+            <button type="button" class="filter-tab" data-filter="ALL">전체 <b id="count-all">0</b></button>
+          </div>
+          <select class="sort-select" id="sort-order" aria-label="정렬 순서">
+            <option value="distance">🧭 가까운 순</option>
+            <option value="time">⏱️ 접수 순</option>
+          </select>
+        </div>
+
+        <div class="task-list" id="task-list-container" role="region" aria-label="수거 대상 목록">
+          <!-- 자바스크립트로 작업 카드 동적 렌더링 -->
+        </div>
+      </aside>
+
+      <!-- 우측 패널: 선택된 건 상세 정보 & 즉시 처리 메인 스테이션 -->
+      <section class="tablet-main-stage" id="main-stage">
+        <!-- 1) 배정 건이 없을 때 빈 화면 -->
+        <div class="stage-empty" id="stage-empty-view" hidden>
+          <div class="empty-icon">🎉</div>
+          <h3>배정된 수거 작업을 모두 완료했거나 작업이 없습니다.</h3>
+          <p>새로 배정된 건이 있는지 [새로고침]을 누르거나 좌측에서 '완료' 탭을 확인하세요.</p>
+        </div>
+
+        <!-- 2) 활성 작업 화면 -->
+        <div class="stage-content" id="stage-content-view">
+          <!-- 상단 대형 주소 및 위치 배너 -->
+          <div class="stage-location-banner">
+            <div class="banner-info">
+              <div class="banner-report-no">
+                <span id="stage-report-no">JC-000000</span>
+                <span id="stage-payment-badge" class="badge-assigned">결제완료</span>
+                <span id="stage-zone-badge" style="font-size:13px;color:var(--tb-muted)">청전·의림</span>
+              </div>
+              <h2 class="banner-address" id="stage-address">주소를 불러오는 중…</h2>
+              <div class="banner-detail-badge" id="stage-address-detail">상세 배출 위치 확인 중…</div>
+            </div>
+            <div class="banner-nav-action">
+              <button type="button" class="btn-nav-kakao" id="btn-navigate-kakao">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3c-5.523 0-10 3.582-10 8 0 2.828 1.83 5.315 4.622 6.708l-.946 3.491c-.083.308.26.558.528.384l4.24-2.775c.504.058 1.023.092 1.556.092 5.523 0 10-3.582 10-8s-4.477-8-10-8z"/></svg>
+                카카오맵 길찾기
+              </button>
+            </div>
+          </div>
+
+          <!-- 중앙 2열 컨텐츠 (지도 + 사진/품목) -->
+          <div class="stage-body-grid">
+            <!-- 좌: 현장 지도 -->
+            <div class="stage-map-card">
+              <div class="map-card-head">
+                <h4>신고 위치 & 현재 내 위치</h4>
+                <span class="map-dist-tag" id="stage-dist-tag">위치 확인 중…</span>
+              </div>
+              <div id="tablet-map" class="tablet-map-canvas" aria-label="수거 위치 및 내 위치 지도"></div>
+            </div>
+
+            <!-- 우: 시민 사진 & 품목 확인 -->
+            <div class="stage-inspect-card">
+              <div class="inspect-photo-box">
+                <h4>신고자가 등록한 배출 현장 사진</h4>
+                <div class="citizen-photo-wrap" id="citizen-photo-container">
+                  <img id="stage-before-photo" alt="신고자가 등록한 배출 사진" />
+                  <span class="photo-zoom-hint">🔍 터치하여 크게 보기</span>
+                </div>
+                <div class="no-photo-placeholder" id="stage-no-photo" hidden>등록된 사진이 없습니다. 주소와 상세 장소를 확인해 주세요.</div>
+              </div>
+
+              <div class="inspect-items-box">
+                <h4>
+                  <span>수거 대상 품목</span>
+                  <span id="stage-total-fee" style="color:var(--tb-primary)">수수료 0원</span>
+                </h4>
+                <table class="items-table">
+                  <thead>
+                    <tr><th>품목명</th><th>규격</th><th>수량</th></tr>
+                  </thead>
+                  <tbody id="stage-items-tbody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- 하단 초대형 원터치 액션바 -->
+          <div class="tablet-action-dock">
+            <button type="button" class="btn-complete-giant" id="btn-tablet-complete">
+              <span style="font-size:26px;">📸</span>
+              <span>사진 찍고 즉시 수거 완료</span>
+            </button>
+            <button type="button" class="btn-uncollected-tablet" id="btn-tablet-uncollected">
+              <span>⚠️ 미수거 등록</span>
+            </button>
+            <button type="button" class="btn-change-tablet" id="btn-tablet-change">
+              <span>🔄 현장 변경 요청</span>
+            </button>
+            <input type="file" id="camera-file-input" accept="image/*" capture="environment" hidden />
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- 1) 태블릿 기기 배정 설정 모달 -->
+    <dialog class="tablet-modal" id="modal-device-config">
+      <div class="modal-inner">
+        <h3 class="modal-title">
+          <span>🚜 태블릿 기기 배정 설정</span>
+          <button type="button" class="modal-close-btn" id="btn-close-device-modal">×</button>
+        </h3>
+        <p style="font-size:14px;color:var(--tb-muted);margin:0;">
+          이 태블릿을 운용할 수거 차량 또는 담당 기사님을 선택해 주세요.<br />
+          설정된 정보는 기기에 자동 저장되어 켜자마자 전용 작업 목록이 열립니다.
+        </p>
+        <div class="modal-chip-grid" id="assignee-preset-grid">
+          <label class="modal-chip-radio">
+            <input type="radio" name="device-assignee-opt" value="김수거 (1호차·청전의림)" checked />
+            <span>🚜 1호차 김수거<br /><small style="font-size:12px;font-weight:normal;">청전·의림 구역</small></span>
+          </label>
+          <label class="modal-chip-radio">
+            <input type="radio" name="device-assignee-opt" value="이청소 (2호차·중앙교동)" />
+            <span>🚛 2호차 이청소<br /><small style="font-size:12px;font-weight:normal;">중앙·교동 구역</small></span>
+          </label>
+          <label class="modal-chip-radio">
+            <input type="radio" name="device-assignee-opt" value="박자원 (3호차·하소영천)" />
+            <span>🚚 3호차 박자원<br /><small style="font-size:12px;font-weight:normal;">하소·영천 구역</small></span>
+          </label>
+          <label class="modal-chip-radio">
+            <input type="radio" name="device-assignee-opt" value="__ALL__" />
+            <span>🌐 전체 배정 건<br /><small style="font-size:12px;font-weight:normal;">공용 / 총괄 모드</small></span>
+          </label>
+        </div>
+        <label style="font-size:14px;font-weight:700;display:flex;flex-direction:column;gap:6px;">
+          또는 담당자명 직접 입력
+          <input type="text" id="custom-assignee-input" placeholder="예: 최기사 (청전)" class="modal-textarea" style="height:44px;" />
+        </label>
+        <div class="modal-actions">
+          <button type="button" class="btn-modal-cancel" id="btn-cancel-device-modal">닫기</button>
+          <button type="button" class="btn-modal-submit" id="btn-save-device-modal">이 태블릿에 저장 및 적용</button>
+        </div>
+      </div>
+    </dialog>
+
+    <!-- 2) 미수거 처리 모달 -->
+    <dialog class="tablet-modal" id="modal-uncollected">
+      <div class="modal-inner">
+        <h3 class="modal-title">
+          <span>⚠️ 미수거 사유 등록</span>
+          <button type="button" class="modal-close-btn" id="btn-close-uncollected">×</button>
+        </h3>
+        <p style="font-size:14px;color:var(--tb-muted);margin:0;">
+          현장에서 수거할 수 없는 사유를 원터치로 선택해 주세요.
+        </p>
+        <div class="modal-chip-grid">
+          <label class="modal-chip-radio">
+            <input type="radio" name="uncollected-chip" value="품목 미배출 (현장에 폐기물 없음)" checked />
+            <span>배출물 없음</span>
+          </label>
+          <label class="modal-chip-radio">
+            <input type="radio" name="uncollected-chip" value="신고 규격·품목 불일치" />
+            <span>규격·품목 불일치</span>
+          </label>
+          <label class="modal-chip-radio">
+            <input type="radio" name="uncollected-chip" value="진입 불가 / 공사중 / 통행 차단" />
+            <span>진입·위치 불가</span>
+          </label>
+          <label class="modal-chip-radio">
+            <input type="radio" name="uncollected-chip" value="수거 불가 품목 (건설·사업장 폐기물)" />
+            <span>수거불가 품목</span>
+          </label>
+          <label class="modal-chip-radio" style="grid-column: span 2;">
+            <input type="radio" name="uncollected-chip" value="기타" />
+            <span>기타 직접 입력</span>
+          </label>
+        </div>
+        <textarea id="uncollected-reason-text" rows="2" class="modal-textarea" placeholder="상세 사유를 입력하세요">품목 미배출 (현장에 폐기물 없음)</textarea>
+        <div>
+          <button type="button" class="tablet-btn-tool" id="btn-uncollected-photo" style="background:#475569;width:100%;height:48px;justify-content:center;font-size:15px;">
+            📷 현장 증빙 사진 촬영 (선택)
+          </button>
+          <input type="file" id="uncollected-photo-file" accept="image/*" capture="environment" hidden />
+          <div id="uncollected-photo-preview" style="margin-top:8px;position:relative;" hidden>
+            <img id="uncollected-photo-img" style="width:100%;height:140px;object-fit:cover;border-radius:8px;" alt="증빙 사진" />
+            <button type="button" id="btn-del-uncollected-photo" style="position:absolute;top:6px;right:6px;background:rgba(0,0,0,0.7);color:#fff;border:none;border-radius:50%;width:28px;height:28px;cursor:pointer;">×</button>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn-modal-cancel" id="btn-cancel-uncollected">취소</button>
+          <button type="button" class="btn-modal-submit" style="background:var(--tb-danger);" id="btn-submit-uncollected">미수거 등록</button>
+        </div>
+      </div>
+    </dialog>
+
+    <!-- 3) 현장 변경 요청 모달 -->
+    <dialog class="tablet-modal" id="modal-change-request">
+      <div class="modal-inner">
+        <h3 class="modal-title">
+          <span>🔄 현장 변경 요청 (접수처 전달)</span>
+          <button type="button" class="modal-close-btn" id="btn-close-change">×</button>
+        </h3>
+        <p style="font-size:14px;color:var(--tb-muted);margin:0;">
+          신고 내용과 현장이 달라 접수처의 추가 산정이 필요한 사항을 선택해 주세요.
+        </p>
+        <div class="modal-chip-grid">
+          <label class="modal-chip-radio">
+            <input type="radio" name="change-chip" value="품목·규격 상이 (추가 수수료 필요)" checked />
+            <span>규격 상이(추가요금)</span>
+          </label>
+          <label class="modal-chip-radio">
+            <input type="radio" name="change-chip" value="신고 수량보다 실물 수량 많음" />
+            <span>수량 불일치</span>
+          </label>
+          <label class="modal-chip-radio">
+            <input type="radio" name="change-chip" value="배출 위치 변경 / 이전 배출" />
+            <span>배출위치 변경</span>
+          </label>
+          <label class="modal-chip-radio">
+            <input type="radio" name="change-chip" value="기타" />
+            <span>기타</span>
+          </label>
+        </div>
+        <textarea id="change-reason-text" rows="2" class="modal-textarea" placeholder="상세 변경 사항을 작성하세요">품목·규격 상이 (추가 수수료 필요)</textarea>
+        <div>
+          <button type="button" class="tablet-btn-tool" id="btn-change-photo" style="background:#475569;width:100%;height:48px;justify-content:center;font-size:15px;">
+            📷 실물 사진 촬영 (선택)
+          </button>
+          <input type="file" id="change-photo-file" accept="image/*" capture="environment" hidden />
+          <div id="change-photo-preview" style="margin-top:8px;position:relative;" hidden>
+            <img id="change-photo-img" style="width:100%;height:140px;object-fit:cover;border-radius:8px;" alt="변경 요청 사진" />
+            <button type="button" id="btn-del-change-photo" style="position:absolute;top:6px;right:6px;background:rgba(0,0,0,0.7);color:#fff;border:none;border-radius:50%;width:28px;height:28px;cursor:pointer;">×</button>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn-modal-cancel" id="btn-cancel-change">취소</button>
+          <button type="button" class="btn-modal-submit" style="background:var(--tb-warn);" id="btn-submit-change">변경 요청 전송</button>
+        </div>
+      </div>
+    </dialog>
+
+    <!-- 4) 사진 확대 모달 -->
+    <dialog class="tablet-modal" id="modal-image-zoom" style="max-width:800px;background:#000;">
+      <div style="position:relative;padding:10px;">
+        <button type="button" id="btn-close-zoom" style="position:absolute;top:14px;right:14px;background:rgba(255,255,255,0.8);border:none;border-radius:50%;width:36px;height:36px;font-size:22px;cursor:pointer;z-index:10;">×</button>
+        <img id="zoom-img" style="width:100%;max-height:80vh;object-fit:contain;display:block;border-radius:8px;" alt="확대 사진" />
+      </div>
+    </dialog>
+
+    <!-- 토스트 알림 메시지 -->
+    <div class="tablet-toast" id="tablet-toast"></div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <script src="photo.js"></script>
+    <script src="tablet.js"></script>
+  </body>
+</html>

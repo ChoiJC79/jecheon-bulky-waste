@@ -1,0 +1,9 @@
+{
+  "name": "jecheon-bulky-waste",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "node server.mjs",
+    "test": "node --test tests/*.test.mjs"
+  }
+}

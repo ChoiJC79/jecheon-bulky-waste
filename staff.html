@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="제천시 대형폐기물 내부 업무 시범 화면" />
+    <title>제천시 대형폐기물 내부 업무</title>
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  </head>
+  <body class="staff-body">
+    <header class="staff-header">
+      <a class="brand" href="index.html"><span class="brand-mark" aria-hidden="true">제</span><span>자원순환 업무</span></a>
+      <div class="network-label"><span></span> 내부 행정망 전용 · 시범 화면</div>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <a href="tablet.html" class="button outline" style="padding:6px 14px;font-size:13px;text-decoration:none;border-radius:8px;background:#e6f5ec;color:#107c41;border-color:#6ee7b7;font-weight:800;display:inline-flex;align-items:center;gap:6px;">📱 현장 수거 태블릿 모드</a>
+        <button type="button" class="profile">김담당 <small>접수 담당자</small></button>
+      </div>
+    </header>
+    <main class="staff-main">
+      <section class="staff-intro">
+        <div><h1>오늘의 수거 업무를<br /><em>한 눈에 확인해요.</em></h1></div>
+        <p>신고 건을 검토하고, 수거구역을 배정하며, 현장 처리와 데이터 정합성을 관리해요.</p>
+      </section>
+      <div class="role-tabs" role="tablist" aria-label="업무 역할">
+        <button role="tab" aria-selected="true" data-tab="reception">접수·배정</button>
+        <button role="tab" aria-selected="false" data-tab="field">현장 처리</button>
+        <button role="tab" aria-selected="false" data-tab="verify">데이터 검증</button>
+      </div>
+
+      <section class="staff-panel active" id="reception" role="tabpanel">
+        <div class="metric-grid" id="metric-grid">
+          <article><small>오늘 접수</small><strong>–</strong><span>불러오는 중…</span></article>
+          <article class="attention"><small>미배정</small><strong>–</strong><span>불러오는 중…</span></article>
+          <article><small>배정완료</small><strong>–</strong><span>불러오는 중…</span></article>
+          <article><small>처리 지연</small><strong>–</strong><span>불러오는 중…</span></article>
+        </div>
+        <div class="work-grid">
+          <section class="work-card request-list">
+            <div class="card-heading">
+              <div><h2 id="list-title">접수 목록</h2></div>
+              <button class="text-button" type="button" id="refresh-reports">새로고침</button>
+            </div>
+            <div class="request-toolbar">
+              <label class="search-box compact" for="request-search">
+                <span class="icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7" /><line x1="21" y1="21" x2="16.6" y2="16.6" /></svg></span>
+                <input id="request-search" type="search" placeholder="접수번호·주소 검색" autocomplete="off" />
+              </label>
+              <select id="status-filter" aria-label="상태 필터">
+                <option value="">전체 상태</option>
+                <option value="RECEIVED">미배정</option>
+                <option value="ASSIGNED">배정완료</option>
+                <option value="UNCOLLECTED">미수거</option>
+                <option value="CHANGE_REQUESTED">현장변경요청</option>
+                <option value="SUPPLEMENT_REQUESTED">보완요청</option>
+                <option value="REJECTED">반려</option>
+                <option value="COLLECTED">수거완료</option>
+              </select>
+              <select id="payment-filter" aria-label="결제 필터">
+                <option value="">전체 결제</option>
+                <option value="PENDING_CASH_RECEIPT">현금수납대기</option>
+                <option value="COMPLETED">결제완료</option>
+              </select>
+            </div>
+            <p class="list-status" id="list-status" role="status"></p>
+            <div id="request-list"></div>
+          </section>
+          <section class="work-card zone-map">
+            <div class="card-heading"><div><h2>수거 위치 현황</h2></div><button class="text-button" type="button" id="zone-reset">전체 보기</button></div>
+            <div class="map-zone-summary" aria-label="수거구역 필터"><button type="button" class="zone-chip" data-zone="청전·의림">청전·의림 <b>0</b></button><button type="button" class="zone-chip" data-zone="중앙·교동">중앙·교동 <b>0</b></button><button type="button" class="zone-chip" data-zone="하소·영천">하소·영천 <b>0</b></button></div>
+            <div id="staff-map" class="staff-map" aria-label="접수 신고 위치 지도"></div>
+            <p class="card-note" id="zone-note">좌표가 저장된 신고 위치를 지도에서 선택하면 접수 상세를 바로 확인할 수 있어요.</p>
+          </section>
+        </div>
+        <section class="detail-drawer" id="request-detail" aria-live="polite"><p>왼쪽 목록에서 신고 건을 선택하면 품목, 위치, 결제 상태를 확인하고 수거구역을 배정하거나 보완요청·반려를 처리할 수 있어요.</p></section>
+      </section>
+
+      <section class="staff-panel" id="field" role="tabpanel" hidden>
+        <div style="max-width:520px;margin:0 auto 16px;background:#e6f5ec;border:1px solid #a7f3d0;border-radius:12px;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;">
+          <div style="font-size:13px;color:#065f46;line-height:1.4;">
+            <strong>🚜 수거 차량 거치대 전용 태블릿 화면</strong><br />
+            기기별 담당자 지정, 2열 분할 뷰, 대형 원터치 수거 버튼이 제공됩니다.
+          </div>
+          <a href="tablet.html" class="button primary" style="font-size:13px;padding:8px 14px;white-space:nowrap;text-decoration:none;border-radius:8px;">태블릿 모드 열기</a>
+        </div>
+        <div class="field-mobile-shell">
+          <div class="field-top"><span>‹</span><div><small id="field-date"></small><strong>오늘의 수거</strong></div><button type="button" id="field-location">현재 위치 확인</button></div>
+          <div class="field-progress"><span id="field-progress-label">배정 건 확인 중</span><strong id="field-progress-count"></strong><div><i id="field-progress-fill"></i></div></div>
+          <div class="field-task-nav" id="field-task-nav">
+            <button type="button" id="field-prev-task" aria-label="이전 배정 건">‹</button>
+            <span id="field-task-indicator">1 / 1</span>
+            <button type="button" id="field-next-task" aria-label="다음 배정 건">›</button>
+          </div>
+          <article class="field-task" id="field-task">
+            <div class="task-state" id="field-task-state">불러오는 중…</div>
+            <p class="task-no" id="field-task-no"></p>
+            <h2 id="field-task-address">배정된 건을 확인하고 있어요.</h2>
+            <div class="task-items" id="field-task-items"></div>
+            <div class="field-before-photo" id="field-before-photo" hidden>
+              <p class="selection-label">신고자가 등록한 위치 사진</p>
+              <img id="field-before-photo-img" alt="신고자가 등록한 배출 위치 사진" />
+            </div>
+            <p class="field-note" id="field-note">신고 사진과 현장 배출 위치를 확인해 주세요.</p>
+            <div class="field-map-container" id="field-map">
+              <div id="field-task-map" class="field-task-map" aria-label="현장 수거 위치 지도"></div>
+              <div class="field-map-info">
+                <b>신고 위치</b>
+                <small id="field-location-message">현재 위치를 확인하면 현장 인접 여부와 실제 거리를 안내해요.</small>
+              </div>
+            </div>
+            <div class="field-actions"><button class="button secondary" type="button" id="navigate">길찾기</button><button class="button outline" type="button" id="change-request">현장 변경 요청</button></div>
+            <div class="field-actions"><button class="button danger" type="button" id="not-collected">미수거 처리</button><button class="button primary" type="button" id="complete-collection">사진 찍고 수거 완료</button></div>
+            <input id="after-photo-input" type="file" accept="image/*" capture="environment" hidden />
+            <p id="field-message" class="form-message"></p>
+          </article>
+        </div>
+      </section>
+
+      <section class="staff-panel" id="verify" role="tabpanel" hidden>
+        <div class="verify-heading">
+          <div><h2>데이터 검증 <span class="readonly-badge">읽기 전용</span></h2><p>원본 데이터를 변경하지 않고 승인 전 오류와 연계 상태를 확인해요.</p></div>
+          <div class="verify-actions-bar">
+            <a class="button outline" id="export-csv" href="/api/reports/export.csv" download>CSV 내려받기</a>
+            <button class="button secondary" type="button" id="refresh-verification">검증 결과 새로고침</button>
+          </div>
+        </div>
+        <div class="verification-grid" id="verification-grid"></div>
+        <section class="work-card issue-table"><div class="card-heading"><div><h2>확인이 필요한 건</h2></div><span class="readonly-badge">읽기 전용</span></div><div class="table-wrap"><table><thead><tr><th>접수번호</th><th>검증 항목</th><th>내용</th><th>조치 담당</th></tr></thead><tbody id="issue-list"></tbody></table></div></section>
+      </section>
+    </main>
+
+    <!-- 미수거 처리 모달 -->
+    <dialog id="uncollected-dialog" class="staff-modal">
+      <form method="dialog" class="modal-form" id="uncollected-form">
+        <div class="modal-head">
+          <h3>미수거 처리</h3>
+          <button type="button" class="modal-close" id="uncollected-modal-close" aria-label="닫기">×</button>
+        </div>
+        <p class="modal-sub">현장에서 수거할 수 없는 사유와 증빙 사진을 등록해 주세요.</p>
+        <div class="reason-preset-group">
+          <label class="preset-chip"><input type="radio" name="uncollected-preset" value="품목 미배출 (현장에 폐기물 없음)" checked /><span>배출물 없음</span></label>
+          <label class="preset-chip"><input type="radio" name="uncollected-preset" value="신고 규격·품목 불일치" /><span>규격·품목 불일치</span></label>
+          <label class="preset-chip"><input type="radio" name="uncollected-preset" value="수거 불가 품목 (건설·사업장 폐기물)" /><span>수거불가 품목</span></label>
+          <label class="preset-chip"><input type="radio" name="uncollected-preset" value="진입 불가 / 위치 확인 불가" /><span>위치 확인 불가</span></label>
+          <label class="preset-chip"><input type="radio" name="uncollected-preset" value="기타" /><span>기타 직접입력</span></label>
+        </div>
+        <label class="modal-label">상세 사유
+          <textarea id="uncollected-reason" rows="2" placeholder="현장 상황을 상세히 작성해 주세요" required>품목 미배출 (현장에 폐기물 없음)</textarea>
+        </label>
+        <div class="modal-photo-field">
+          <input type="file" id="uncollected-photo-file" accept="image/*" capture="environment" hidden />
+          <button type="button" class="button outline" id="uncollected-photo-btn">현장 증빙 사진 촬영</button>
+          <div id="uncollected-photo-preview" class="photo-preview" hidden>
+            <img id="uncollected-photo-img" alt="미수거 현장 사진" />
+            <button type="button" id="uncollected-photo-del" aria-label="사진 삭제">×</button>
+          </div>
+        </div>
+        <p class="form-message" id="uncollected-modal-msg"></p>
+        <div class="modal-actions">
+          <button type="button" class="button outline" id="uncollected-cancel-btn">취소</button>
+          <button type="button" class="button danger" id="uncollected-submit-btn">미수거 등록</button>
+        </div>
+      </form>
+    </dialog>
+
+    <!-- 현장 변경 요청 모달 -->
+    <dialog id="change-request-dialog" class="staff-modal">
+      <form method="dialog" class="modal-form" id="change-request-form">
+        <div class="modal-head">
+          <h3>현장 변경 요청</h3>
+          <button type="button" class="modal-close" id="change-modal-close" aria-label="닫기">×</button>
+        </div>
+        <p class="modal-sub">신고 내용과 현장이 달라 접수 담당자의 확인 및 재산정이 필요한 사항을 작성해 주세요.</p>
+        <div class="reason-preset-group">
+          <label class="preset-chip"><input type="radio" name="change-preset" value="품목·규격 상이 (추가 수수료 필요)" checked /><span>규격 상이(추가요금)</span></label>
+          <label class="preset-chip"><input type="radio" name="change-preset" value="배출 위치 변경 / 이전 배출" /><span>배출위치 변경</span></label>
+          <label class="preset-chip"><input type="radio" name="change-preset" value="신고 수량보다 실물 수량 많음" /><span>수량 불일치</span></label>
+          <label class="preset-chip"><input type="radio" name="change-preset" value="기타" /><span>기타</span></label>
+        </div>
+        <label class="modal-label">변경 요청 내용
+          <textarea id="change-reason" rows="2" placeholder="현장 변경 사항을 상세히 작성해 주세요" required>품목·규격 상이 (추가 수수료 필요)</textarea>
+        </label>
+        <div class="modal-photo-field">
+          <input type="file" id="change-photo-file" accept="image/*" capture="environment" hidden />
+          <button type="button" class="button outline" id="change-photo-btn">현장 사진 촬영</button>
+          <div id="change-photo-preview" class="photo-preview" hidden>
+            <img id="change-photo-img" alt="현장 변경 사진" />
+            <button type="button" id="change-photo-del" aria-label="사진 삭제">×</button>
+          </div>
+        </div>
+        <p class="form-message" id="change-modal-msg"></p>
+        <div class="modal-actions">
+          <button type="button" class="button outline" id="change-cancel-btn">취소</button>
+          <button type="button" class="button secondary" id="change-submit-btn">변경 요청 전송</button>
+        </div>
+      </form>
+    </dialog>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <script src="photo.js"></script>
+    <script src="staff.js"></script>
+  </body>
+</html>

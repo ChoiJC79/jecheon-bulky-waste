@@ -1,0 +1,45 @@
+{
+  "version": 2,
+  "cleanUrls": true,
+  "rewrites": [
+    {
+      "source": "/api/reports/export.csv",
+      "destination": "/api/reports/export"
+    },
+    {
+      "source": "/api/reports/:reportNo/status",
+      "destination": "/api/reports/[reportNo]/status"
+    },
+    {
+      "source": "/api/reports/:reportNo",
+      "destination": "/api/reports/[reportNo]"
+    },
+    {
+      "source": "/staff",
+      "destination": "/staff.html"
+    },
+    {
+      "source": "/tablet",
+      "destination": "/tablet.html"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "X-Frame-Options",
+          "value": "DENY"
+        },
+        {
+          "key": "X-XSS-Protection",
+          "value": "1; mode=block"
+        }
+      ]
+    }
+  ]
+}

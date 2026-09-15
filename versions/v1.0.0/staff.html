@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="제천시 대형폐기물 내부 업무 시범 화면" />
+    <title>제천시 대형폐기물 내부 업무</title>
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  </head>
+  <body class="staff-body">
+    <header class="staff-header">
+      <a class="brand" href="index.html"><span class="brand-mark" aria-hidden="true">제</span><span>자원순환 업무</span></a>
+      <div class="network-label"><span></span> 내부 행정망 전용 · 시범 화면</div>
+      <button type="button" class="profile">김담당 <small>접수 담당자</small></button>
+    </header>
+    <main class="staff-main">
+      <section class="staff-intro">
+        <div><h1>오늘의 수거 업무를<br /><em>한 눈에 확인해요.</em></h1></div>
+        <p>신고 건을 검토하고, 수거구역을 배정하며, 현장 처리와 데이터 정합성을 관리해요.</p>
+      </section>
+      <div class="role-tabs" role="tablist" aria-label="업무 역할">
+        <button role="tab" aria-selected="true" data-tab="reception">접수·배정</button>
+        <button role="tab" aria-selected="false" data-tab="field">현장 처리</button>
+        <button role="tab" aria-selected="false" data-tab="verify">데이터 검증</button>
+      </div>
+
+      <section class="staff-panel active" id="reception" role="tabpanel">
+        <div class="metric-grid" id="metric-grid">
+          <article><small>오늘 접수</small><strong>–</strong><span>불러오는 중…</span></article>
+          <article class="attention"><small>미배정</small><strong>–</strong><span>불러오는 중…</span></article>
+          <article><small>배정완료</small><strong>–</strong><span>불러오는 중…</span></article>
+          <article><small>처리 지연</small><strong>–</strong><span>불러오는 중…</span></article>
+        </div>
+        <div class="work-grid">
+          <section class="work-card request-list">
+            <div class="card-heading">
+              <div><h2 id="list-title">접수 목록</h2></div>
+              <button class="text-button" type="button" id="refresh-reports">새로고침</button>
+            </div>
+            <div class="request-toolbar">
+              <label class="search-box compact" for="request-search">
+                <span class="icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7" /><line x1="21" y1="21" x2="16.6" y2="16.6" /></svg></span>
+                <input id="request-search" type="search" placeholder="접수번호·주소 검색" autocomplete="off" />
+              </label>
+              <select id="status-filter" aria-label="상태 필터">
+                <option value="">전체 상태</option>
+                <option value="RECEIVED">미배정</option>
+                <option value="ASSIGNED">배정완료</option>
+                <option value="SUPPLEMENT_REQUESTED">보완요청</option>
+                <option value="REJECTED">반려</option>
+              </select>
+            </div>
+            <p class="list-status" id="list-status" role="status"></p>
+            <div id="request-list"></div>
+          </section>
+          <section class="work-card zone-map">
+            <div class="card-heading"><div><h2>수거 위치 현황</h2></div><button class="text-button" type="button" id="zone-reset">전체 보기</button></div>
+            <div class="map-zone-summary" aria-label="수거구역 필터"><button type="button" class="zone-chip" data-zone="청전·의림">청전·의림 <b>0</b></button><button type="button" class="zone-chip" data-zone="중앙·교동">중앙·교동 <b>0</b></button><button type="button" class="zone-chip" data-zone="하소·영천">하소·영천 <b>0</b></button></div>
+            <div id="staff-map" class="staff-map" aria-label="접수 신고 위치 지도"></div>
+            <p class="card-note" id="zone-note">좌표가 저장된 신고 위치를 지도에서 선택하면 접수 상세를 바로 확인할 수 있어요.</p>
+          </section>
+        </div>
+        <section class="detail-drawer" id="request-detail" aria-live="polite"><p>왼쪽 목록에서 신고 건을 선택하면 품목, 위치, 결제 상태를 확인하고 수거구역을 배정하거나 보완요청·반려를 처리할 수 있어요.</p></section>
+      </section>
+
+      <section class="staff-panel" id="field" role="tabpanel" hidden>
+        <div class="field-mobile-shell">
+          <div class="field-top"><span>‹</span><div><small id="field-date"></small><strong>오늘의 수거</strong></div><button type="button" id="field-location">현재 위치 확인</button></div>
+          <div class="field-progress"><span id="field-progress-label">배정 건 확인 중</span><strong id="field-progress-count"></strong><div><i id="field-progress-fill"></i></div></div>
+          <article class="field-task" id="field-task">
+            <div class="task-state" id="field-task-state">불러오는 중…</div>
+            <p class="task-no" id="field-task-no"></p>
+            <h2 id="field-task-address">배정된 건을 확인하고 있어요.</h2>
+            <div class="task-items" id="field-task-items"></div>
+            <div class="field-before-photo" id="field-before-photo" hidden>
+              <p class="selection-label">신고자가 등록한 위치 사진</p>
+              <img id="field-before-photo-img" alt="신고자가 등록한 배출 위치 사진" />
+            </div>
+            <p class="field-note" id="field-note">신고 사진과 현장 배출 위치를 확인해 주세요.</p>
+            <div class="field-map" id="field-map"><span class="field-pin" aria-hidden="true">●</span><b>신고 위치</b><small id="field-location-message">현재 위치를 확인하면 현장 인접 여부를 안내해요.</small></div>
+            <div class="field-actions"><button class="button secondary" type="button" id="navigate">길찾기</button><button class="button outline" type="button" id="change-request">현장 변경 요청</button></div>
+            <div class="field-actions"><button class="button danger" type="button" id="not-collected">미수거 처리</button><button class="button primary" type="button" id="complete-collection">사진 찍고 수거 완료</button></div>
+            <input id="after-photo-input" type="file" accept="image/*" capture="environment" hidden />
+            <p id="field-message" class="form-message"></p>
+          </article>
+        </div>
+      </section>
+
+      <section class="staff-panel" id="verify" role="tabpanel" hidden>
+        <div class="verify-heading"><div><h2>데이터 검증 <span class="readonly-badge">읽기 전용</span></h2><p>원본 데이터를 변경하지 않고 승인 전 오류와 연계 상태를 확인해요.</p></div><button class="button secondary" type="button" id="refresh-verification">검증 결과 새로고침</button></div>
+        <div class="verification-grid" id="verification-grid"></div>
+        <section class="work-card issue-table"><div class="card-heading"><div><h2>확인이 필요한 건</h2></div><span class="readonly-badge">읽기 전용</span></div><div class="table-wrap"><table><thead><tr><th>접수번호</th><th>검증 항목</th><th>내용</th><th>조치 담당</th></tr></thead><tbody id="issue-list"></tbody></table></div></section>
+      </section>
+    </main>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <script src="photo.js"></script>
+    <script src="staff.js"></script>
+  </body>
+</html>
