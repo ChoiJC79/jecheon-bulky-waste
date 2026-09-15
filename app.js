@@ -375,8 +375,8 @@ function goToStep(targetStep) {
 
   const checkoutBtn = $("#checkout-step-btn");
   if (checkoutBtn) {
-    if (targetStep === 1) checkoutBtn.textContent = "다음: 배출 위치 입력 ›";
-    else if (targetStep === 2) checkoutBtn.textContent = "다음: 결제 방법 선택 ›";
+    if (targetStep === 1) checkoutBtn.textContent = '다음 단계 "결제" ›';
+    else if (targetStep === 2) checkoutBtn.textContent = '다음 단계 "결제" ›';
     else {
       const selected = document.querySelector("input[name=payment]:checked");
       updateSubmitButtonText(selected?.value);

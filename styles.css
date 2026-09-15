@@ -78,9 +78,11 @@ h1, h2, h3, p { margin: 0; }
 }
 .brand { display: flex; align-items: center; gap: 9px; color: var(--ink); text-decoration: none; font-weight: 800; letter-spacing: -.02em; }
 .brand-mark {
-  display: grid; place-items: center; width: 30px; height: 30px; border-radius: 10px;
-  color: #fff; background: var(--accent); font-weight: 800; font-size: .95rem;
+  display: grid; place-items: center; width: 32px; height: 32px; border-radius: 9px;
+  background: #ffffff; border: 1px solid rgba(0,0,0,0.08); box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  flex-shrink: 0;
 }
+.brand-mark svg { display: block; width: 24px; height: 24px; }
 .topbar-help {
   display: grid; place-items: center; width: 36px; height: 36px; border-radius: var(--radius-sm);
   color: var(--muted); background: var(--surface); border: 1px solid var(--line); text-decoration: none;
@@ -240,13 +242,14 @@ input[type="search"], input[type="text"] {
 .no-result { grid-column: 1 / -1; padding: 14px; color: var(--muted); font-size: .85rem; text-align: center; }
 
 .selection-card {
-  display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-end; justify-content: space-between;
+  display: flex; flex-direction: column; gap: 14px;
   margin-top: 14px; padding: 16px; border-radius: var(--radius-md); background: var(--accent-soft);
 }
 .selection-label { margin: 0 0 3px; color: var(--accent-ink); font-size: .78rem; font-weight: 700; letter-spacing: .02em; }
 .selection-card strong { display: block; font-size: 1.05rem; font-weight: 800; }
 .selection-card > div > span { display: block; margin-top: 3px; color: var(--muted); font-size: .8rem; }
-.selection-controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; }
+.selection-controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; width: 100%; }
+#add-item { margin-left: auto; }
 select {
   min-width: 128px; margin-top: 5px; padding: 10px 12px; border: 1px solid var(--line);
   border-radius: var(--radius-sm); background: var(--surface);
