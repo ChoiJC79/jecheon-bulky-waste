@@ -5,25 +5,25 @@
    ========================================================================== */
 
 :root {
-  --tb-bg: #f4f6f5;
+  --tb-bg: #f8fafc;
   --tb-surface: #ffffff;
-  --tb-surface-alt: #eef2f0;
-  --tb-line: #d8dedb;
-  --tb-text: #141d1a;
-  --tb-muted: #5e6b66;
-  --tb-primary: #107c41; /* 제천시 자원순환 안전 그린 */
-  --tb-primary-hover: #0b5e31;
-  --tb-primary-light: #e6f5ec;
-  --tb-accent: #ff5a36;
-  --tb-warn: #b45309;
-  --tb-warn-light: #fef3c7;
-  --tb-danger: #c5221f;
-  --tb-danger-light: #fee2e2;
+  --tb-surface-alt: #f1f5f9;
+  --tb-line: #e2e8f0;
+  --tb-text: #111827;
+  --tb-muted: #4b5563;
+  --tb-primary: #15803d; /* 제천시 자원순환 그린 */
+  --tb-primary-hover: #166534;
+  --tb-primary-light: #f0fdf4;
+  --tb-accent: #65a30d;  /* 연두 포인트 */
+  --tb-warn: #854d0e;
+  --tb-warn-light: #fefce8;
+  --tb-danger: #b91c1c;
+  --tb-danger-light: #fef2f2;
   --tb-info: #1d4ed8;
-  --tb-info-light: #dbeafe;
-  --tb-radius: 16px;
-  --tb-radius-sm: 10px;
-  --tb-shadow: 0 4px 16px rgba(16, 32, 24, 0.08);
+  --tb-info-light: #eff6ff;
+  --tb-radius: 4px;
+  --tb-radius-sm: 3px;
+  --tb-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
 /* 야외 직사광선 고대비 모드 */
