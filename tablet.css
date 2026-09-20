@@ -57,6 +57,9 @@ body.tablet-body {
   user-select: none;
   -webkit-user-select: none;
 }
+body.tablet-body [hidden] {
+  display: none !important;
+}
 
 /* --------------------------------------------------------------------------
    상단 헤더
@@ -419,6 +422,10 @@ body.tablet-body {
   gap: 12px;
   padding: 40px;
   text-align: center;
+}
+.stage-empty[hidden],
+.stage-content[hidden] {
+  display: none !important;
 }
 .stage-empty .empty-icon {
   font-size: 48px;
