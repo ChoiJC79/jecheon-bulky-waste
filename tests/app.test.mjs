@@ -39,7 +39,13 @@ test("내부 업무 화면은 접수·현장·데이터 검증 역할을 제공�
   assert.match(html, /데이터 검증/);
   assert.match(html, /읽기 전용/);
   assert.match(html, /id="staff-map"/);
+  assert.match(html, /id="nearby-clusters"/);
+  assert.match(html, /id="cluster-rule"/);
+  assert.match(html, /type="module" src="staff.js"/);
   assert.match(app, /renderReportMap/);
+  assert.match(app, /buildNearbyClusters/);
+  assert.match(app, /assignClusterTogether/);
+  assert.match(app, /setInterval\(\(\) => loadReports\(\{ quiet: true, keepDetail: true \}\), 30000\)/);
 });
 
 test("시민 신고 화면은 배출 위치 사진 촬영과 접수번호 조회를 지원한다", async () => {
@@ -86,9 +92,11 @@ test("현장 업무 화면은 지도 표시, 실제 거리 계산, 길찾기, �
   assert.match(html, /id="field-prev-task"/);
   assert.match(html, /id="field-next-task"/);
   assert.match(html, /id="export-csv"/);
-  assert.match(app, /calculateDistanceMeters/);
+  const clusters = await readFile(new URL("../nearby-clusters.js", import.meta.url), "utf8");
+  assert.match(clusters, /function calculateDistanceMeters/);
   assert.match(app, /updateFieldTaskMap/);
   assert.match(app, /action: "uncollect"/);
   assert.match(app, /action: "field_change"/);
+  assert.match(app, /from "\.\/nearby-clusters\.js"/);
 });
 

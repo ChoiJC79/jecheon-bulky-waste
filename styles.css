@@ -492,6 +492,43 @@ footer strong { color: var(--ink); }
 .metric-grid strong, .verification-card strong { display: block; margin: 5px 0; font-weight: 800; font-size: 1.8rem; letter-spacing: -.02em; color: var(--ink); }
 .metric-grid span, .verification-card span { color: var(--muted); font-size: .75rem; }
 
+.nearby-clusters { margin-top: 16px; }
+.cluster-rule { margin: 6px 0 0; color: var(--muted); font-size: .78rem; line-height: 1.45; max-width: 72ch; }
+.cluster-count { color: var(--accent-ink); background: var(--accent-soft); border: 1px solid var(--lime-border); padding: 3px 8px; border-radius: var(--radius-xs); font-size: .74rem; font-weight: 800; white-space: nowrap; }
+#cluster-list { display: grid; gap: 10px; }
+.cluster-card {
+  width: 100%; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--radius-xs);
+  background: #ffffff; text-align: left;
+}
+.cluster-card:hover { border-color: var(--accent); background: var(--accent-soft); }
+.cluster-card.active { border-color: var(--accent); background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
+.cluster-card-head {
+  width: 100%; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+  border: 0; background: transparent; padding: 0; cursor: pointer; font: inherit; color: inherit; text-align: left;
+}
+.cluster-card-head strong { display: block; font-size: .9rem; font-weight: 800; color: var(--ink); }
+.cluster-card-head small { display: block; margin-top: 3px; color: var(--muted); font-size: .76rem; }
+.cluster-span { color: var(--accent-ink); font-size: .76rem; font-weight: 800; white-space: nowrap; }
+.cluster-members { margin: 10px 0 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+.cluster-members button {
+  width: 100%; display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center;
+  padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--radius-xs); background: #ffffff; text-align: left;
+}
+.cluster-members button:hover, .cluster-members button.active { border-color: var(--accent); background: #ffffff; }
+.cluster-members strong, .cluster-members small { display: block; }
+.cluster-members strong { font-size: .82rem; font-weight: 700; }
+.cluster-members small { color: var(--muted); font-size: .74rem; }
+.cluster-context { margin: 8px 0 0; color: var(--muted); font-size: .76rem; line-height: 1.4; }
+.cluster-assign { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; margin-top: 10px; }
+.cluster-assign label { flex: 1; min-width: 140px; font-size: .78rem; font-weight: 700; color: var(--muted); }
+.cluster-assign select, .cluster-assign input {
+  width: 100%; margin-top: 4px; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--radius-xs); background: #ffffff; color: var(--ink); font-weight: 600;
+}
+.cluster-assign .button { flex: 0 0 auto; }
+.cluster-message { min-height: 16px; margin: 8px 0 0; color: var(--muted); font-size: .78rem; }
+.request-row.in-cluster { box-shadow: inset 3px 0 0 var(--accent); }
+.request-row.in-cluster strong { color: var(--accent-ink); }
+
 .work-grid { display: grid; grid-template-columns: 1.05fr .95fr; gap: 16px; margin-top: 16px; }
 .work-card { padding: 20px; border-radius: var(--radius-xs); background: #ffffff; border: 1px solid var(--line); }
 .card-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 14px; }

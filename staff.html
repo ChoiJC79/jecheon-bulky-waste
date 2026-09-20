@@ -43,7 +43,7 @@
     <main class="staff-main">
       <section class="staff-intro">
         <div><h1>오늘의 수거 업무를<br /><em>한 눈에 확인해요.</em></h1></div>
-        <p>신고 건을 검토하고, 수거구역을 배정하며, 현장 처리와 데이터 정합성을 관리해요.</p>
+        <p>신고 건을 검토하고, 가까운 미배정 건을 묶어 함께 배정하며, 현장 처리와 데이터 정합성을 관리해요.</p>
       </section>
       <div class="role-tabs" role="tablist" aria-label="업무 역할">
         <button role="tab" aria-selected="true" data-tab="reception">접수·배정</button>
@@ -58,6 +58,17 @@
           <article><small>배정완료</small><strong>–</strong><span>불러오는 중…</span></article>
           <article><small>처리 지연</small><strong>–</strong><span>불러오는 중…</span></article>
         </div>
+        <section class="work-card nearby-clusters" id="nearby-clusters" aria-labelledby="cluster-title">
+          <div class="card-heading">
+            <div>
+              <h2 id="cluster-title">가까운 신고 묶음</h2>
+              <p class="cluster-rule" id="cluster-rule">추천 규칙: 좌표가 있는 미배정(접수) 건만 대상으로, 직선거리 300m 이내로 이어진 2건 이상을 한 묶음으로 보여 줍니다. 이미 배정된 인근 건은 같은 담당자에게 맞출 참고용입니다. 수거 기사 위치는 수집하지 않으며, 신고에 저장된 배출 좌표만 사용합니다.</p>
+            </div>
+            <span class="cluster-count" id="cluster-count"></span>
+          </div>
+          <p class="list-status" id="cluster-status" role="status"></p>
+          <div id="cluster-list"></div>
+        </section>
         <div class="work-grid">
           <section class="work-card request-list">
             <div class="card-heading">
@@ -220,6 +231,6 @@
     </dialog>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     <script src="photo.js"></script>
-    <script src="staff.js"></script>
+    <script type="module" src="staff.js"></script>
   </body>
 </html>

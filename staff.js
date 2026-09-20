@@ -1,3 +1,14 @@
+import {
+  CLUSTER_RADIUS_METERS,
+  CLUSTER_RULE_TEXT,
+  buildNearbyClusters,
+  calculateDistanceMeters,
+  formatClusterDistance,
+  suggestClusterAssignment
+} from "./nearby-clusters.js";
+
+const capturePhoto = (...args) => globalThis.capturePhoto(...args);
+
 const STATUS_LABEL = {
   RECEIVED: "미배정",
   ASSIGNED: "배정완료",
@@ -27,6 +38,8 @@ const state = {
   zones: ["청전·의림", "중앙·교동", "하소·영천"],
   filters: { q: "", status: "", payment: "", zone: "" },
   selected: null,
+  selectedCluster: null,
+  clusters: [],
   fieldQueue: [],
   fieldIndex: 0,
   fieldReport: null,
@@ -35,6 +48,7 @@ const state = {
 const JECHEON_CENTER = [37.1326, 128.1910];
 let staffMap;
 let reportLayer;
+let clusterLayer;
 let fieldTaskMap;
 let fieldReportMarker;
 let fieldUserMarker;
@@ -85,23 +99,61 @@ function setupStaffMap() {
   staffMap = L.map("staff-map", { zoomControl: false }).setView(JECHEON_CENTER, 13);
   L.control.zoom({ position: "bottomright" }).addTo(staffMap);
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "&copy; OpenStreetMap contributors" }).addTo(staffMap);
+  clusterLayer = L.layerGroup().addTo(staffMap);
   reportLayer = L.layerGroup().addTo(staffMap);
+}
+
+function getSelectedCluster() {
+  return state.clusters.find((cluster) => cluster.id === state.selectedCluster) || null;
+}
+
+function clusterMemberNos(cluster = getSelectedCluster()) {
+  return new Set((cluster?.members || []).map((report) => report.report_no));
 }
 
 function renderReportMap() {
   if (!reportLayer) return;
   reportLayer.clearLayers();
+  if (clusterLayer) clusterLayer.clearLayers();
+  const selectedCluster = getSelectedCluster();
+  const memberNos = clusterMemberNos(selectedCluster);
   const visible = getFiltered().filter((report) => Number.isFinite(report.latitude) && Number.isFinite(report.longitude));
+  const visibleNos = new Set(visible.map((report) => report.report_no));
+
+  if (selectedCluster && clusterLayer) {
+    const radius = Math.max(80, selectedCluster.maxDistanceMeters / 2 + 40);
+    L.circle([selectedCluster.centroid.latitude, selectedCluster.centroid.longitude], {
+      radius,
+      color: "#c2410c",
+      weight: 1,
+      dashArray: "4 4",
+      fillColor: "#fb923c",
+      fillOpacity: 0.12
+    }).addTo(clusterLayer);
+    selectedCluster.members.forEach((report) => {
+      if (visibleNos.has(report.report_no) || !Number.isFinite(report.latitude)) return;
+      L.circleMarker([report.latitude, report.longitude], {
+        radius: 8,
+        color: "#c2410c",
+        weight: 3,
+        fillColor: "#ff5a36",
+        fillOpacity: 0.85
+      }).addTo(clusterLayer).bindTooltip(`${escapeHtml(report.report_no)} · ${escapeHtml(report.address)}`, { direction: "top", offset: [0, -7] })
+        .on("click", () => selectReport(report.report_no, { keepCluster: true }));
+    });
+  }
+
   visible.forEach((report) => {
+    const inCluster = memberNos.has(report.report_no);
     const marker = L.circleMarker([report.latitude, report.longitude], {
-      radius: report.report_no === state.selected ? 10 : 7,
-      color: "#ffffff",
-      weight: 2,
+      radius: report.report_no === state.selected ? 10 : inCluster ? 9 : 7,
+      color: inCluster ? "#c2410c" : "#ffffff",
+      weight: inCluster ? 3 : 2,
       fillColor: report.status === "RECEIVED" ? "#ff5a36" : "#2c7a4b",
       fillOpacity: 1
     }).addTo(reportLayer);
     marker.bindTooltip(`${escapeHtml(report.report_no)} · ${escapeHtml(report.address)}`, { direction: "top", offset: [0, -7] });
-    marker.on("click", () => { state.selected = report.report_no; renderList(); renderDetail(); renderReportMap(); });
+    marker.on("click", () => selectReport(report.report_no, { keepCluster: inCluster }));
   });
 }
 
@@ -118,7 +170,8 @@ function renderList() {
     const paymentBadge = isPendingCash
       ? `<span class="badge-tag badge-cash">💵 현금수납대기</span>`
       : `<span class="badge-tag badge-pay-ok">${report.payment_method === "cash" ? "현금완료" : "결제완료"}</span>`;
-    return `<button class="request-row ${report.report_no === state.selected ? "active" : ""}" type="button" data-report="${report.report_no}">
+    const inCluster = clusterMemberNos().has(report.report_no);
+    return `<button class="request-row ${report.report_no === state.selected ? "active" : ""} ${inCluster ? "in-cluster" : ""}" type="button" data-report="${report.report_no}">
       <span>
         <strong>${escapeHtml(report.address)}</strong>
         <small>${escapeHtml(itemSummary)} · ${won.format(report.total_fee)}원</small>
@@ -128,12 +181,155 @@ function renderList() {
       <b>›</b>
     </button>`;
   }).join("");
-  document.querySelectorAll("[data-report]").forEach((button) => button.addEventListener("click", () => { state.selected = button.dataset.report; renderList(); renderDetail(); renderReportMap(); focusSelectedReport(); }));
+  $("#request-list").querySelectorAll("[data-report]").forEach((button) => button.addEventListener("click", () => selectReport(button.dataset.report)));
+}
+
+function selectReport(reportNo, { keepCluster = false, focusMap = true } = {}) {
+  state.selected = reportNo;
+  if (!keepCluster) {
+    const stillInCluster = clusterMemberNos().has(reportNo);
+    if (!stillInCluster) state.selectedCluster = null;
+  }
+  renderClusters();
+  renderList();
+  renderDetail();
+  renderReportMap();
+  if (focusMap) focusSelectedReport();
 }
 
 function focusSelectedReport() {
   const report = state.allReports.find((candidate) => candidate.report_no === state.selected);
   if (staffMap && report && Number.isFinite(report.latitude) && Number.isFinite(report.longitude)) staffMap.setView([report.latitude, report.longitude], 16, { animate: true });
+}
+
+function focusClusterOnMap(cluster) {
+  if (!staffMap || !cluster?.members?.length) return;
+  const points = cluster.members.filter((report) => Number.isFinite(report.latitude) && Number.isFinite(report.longitude)).map((report) => [report.latitude, report.longitude]);
+  if (points.length >= 2) staffMap.fitBounds(points, { padding: [36, 36], maxZoom: 16, animate: true });
+  else if (points.length === 1) staffMap.setView(points[0], 16, { animate: true });
+}
+
+function refreshClusters({ keepSelection = true } = {}) {
+  const previous = keepSelection ? state.selectedCluster : null;
+  state.clusters = buildNearbyClusters(state.allReports);
+  if (previous && state.clusters.some((cluster) => cluster.id === previous)) state.selectedCluster = previous;
+  else if (previous) state.selectedCluster = null;
+  renderClusters();
+}
+
+function renderClusters() {
+  const list = $("#cluster-list");
+  const status = $("#cluster-status");
+  const count = $("#cluster-count");
+  const rule = $("#cluster-rule");
+  if (!list || !status) return;
+  if (rule) rule.textContent = CLUSTER_RULE_TEXT;
+  const clusters = state.clusters;
+  count.textContent = clusters.length ? `${clusters.length}개 묶음` : "추천 없음";
+  if (!clusters.length) {
+    status.textContent = `지금은 가까운 미배정 묶음이 없습니다. 좌표가 있는 미배정 건이 ${CLUSTER_RADIUS_METERS}m 이내에 2건 이상 모이면 여기에 추천됩니다.`;
+    list.innerHTML = "";
+    return;
+  }
+  status.textContent = "";
+  list.innerHTML = clusters.map((cluster) => {
+    const selected = cluster.id === state.selectedCluster;
+    const title = `${escapeHtml(cluster.members[0].address)} 외 ${cluster.members.length - 1}곳`;
+    const suggestion = suggestClusterAssignment(cluster, state.zones);
+    const membersHtml = selected ? `<ul class="cluster-members">${cluster.members.map((report) => {
+      const itemSummary = (report.items || []).map((item) => item.name).join(" · ") || "품목 정보 없음";
+      return `<li><button type="button" class="${report.report_no === state.selected ? "active" : ""}" data-cluster-member="${escapeHtml(report.report_no)}">
+        <span><strong>${escapeHtml(report.address)}</strong><small>${escapeHtml(report.report_no)} · ${escapeHtml(itemSummary)} · ${won.format(report.total_fee)}원</small></span>
+        <i class="badge-warn">${STATUS_LABEL[report.status] || report.status}</i>
+      </button></li>`;
+    }).join("")}</ul>` : "";
+    const contextHtml = selected && cluster.nearbyAssigned.length
+      ? `<p class="cluster-context">인근 배정 건 ${cluster.nearbyAssigned.length}건 (참고): ${cluster.nearbyAssigned.map((report) => `${escapeHtml(report.report_no)} ${escapeHtml(report.assignee || report.zone || "")}`).join(" · ")}</p>`
+      : "";
+    const assignHtml = selected ? `<div class="cluster-assign">
+      <label>수거구역<select data-cluster-zone>${state.zones.map((zone) => `<option value="${escapeHtml(zone)}" ${suggestion.zone === zone ? "selected" : ""}>${escapeHtml(zone)}</option>`).join("")}</select></label>
+      <label>수거 담당자<input data-cluster-assignee type="text" placeholder="담당자명 (선택)" value="${escapeHtml(suggestion.assignee)}" /></label>
+      <button class="button secondary" type="button" data-cluster-assign="${escapeHtml(cluster.id)}">이 묶음 함께 배정</button>
+    </div>
+    <p class="cluster-message" data-cluster-message></p>` : "";
+    return `<article class="cluster-card ${selected ? "active" : ""}" data-cluster-id="${escapeHtml(cluster.id)}">
+      <button class="cluster-card-head" type="button" data-cluster-toggle="${escapeHtml(cluster.id)}">
+        <span><strong>${title}</strong><small>미배정 ${cluster.receivedCount}건 · ${won.format(cluster.totalFee)}원</small></span>
+        <span class="cluster-span">최대 간격 ${formatClusterDistance(cluster.maxDistanceMeters)}</span>
+      </button>
+      ${membersHtml}${contextHtml}${assignHtml}
+    </article>`;
+  }).join("");
+
+  list.querySelectorAll("[data-cluster-toggle]").forEach((button) => button.addEventListener("click", () => {
+    const clusterId = button.dataset.clusterToggle;
+    inspectCluster(clusterId, { toggle: true });
+  }));
+  list.querySelectorAll("[data-cluster-member]").forEach((button) => button.addEventListener("click", (event) => {
+    event.stopPropagation();
+    selectReport(button.dataset.clusterMember, { keepCluster: true });
+  }));
+  list.querySelectorAll("[data-cluster-assign]").forEach((button) => button.addEventListener("click", () => {
+    assignClusterTogether(button.closest("[data-cluster-id]"));
+  }));
+}
+
+function inspectCluster(clusterId, { toggle = false } = {}) {
+  const cluster = state.clusters.find((item) => item.id === clusterId);
+  if (!cluster) return;
+  if (toggle && state.selectedCluster === clusterId) {
+    state.selectedCluster = null;
+    renderClusters();
+    renderList();
+    renderReportMap();
+    return;
+  }
+  state.selectedCluster = clusterId;
+  state.selected = cluster.members[0].report_no;
+  renderClusters();
+  renderList();
+  renderDetail();
+  renderReportMap();
+  focusClusterOnMap(cluster);
+}
+
+async function assignClusterTogether(card) {
+  const clusterId = card?.dataset?.clusterId;
+  const cluster = state.clusters.find((item) => item.id === clusterId);
+  const message = card?.querySelector("[data-cluster-message]");
+  const zone = card?.querySelector("[data-cluster-zone]")?.value;
+  const assignee = card?.querySelector("[data-cluster-assignee]")?.value || "";
+  if (!cluster || !message) return;
+  const targets = cluster.members.filter((report) => report.status === "RECEIVED");
+  if (!targets.length) {
+    message.textContent = "함께 배정할 미배정 건이 없습니다.";
+    return;
+  }
+  const pendingCash = targets.filter((report) => report.payment_status === "PENDING_CASH_RECEIPT");
+  if (pendingCash.length && !confirm(`⚠️ 이 묶음에 현금 수납이 확인되지 않은 건이 ${pendingCash.length}건 있습니다.\n수납 확인 전에 같은 구역으로 함께 배정하시겠습니까?`)) {
+    return;
+  }
+  message.textContent = `${targets.length}건을 함께 배정하고 있습니다…`;
+  document.querySelectorAll("[data-cluster-assign], .assignment button, .reason-actions button").forEach((button) => { button.disabled = true; });
+  try {
+    for (const report of targets) {
+      const response = await fetch(`/api/reports/${encodeURIComponent(report.report_no)}/status`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "assign", zone, assignee })
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || `${report.report_no} 배정에 실패했습니다.`);
+    }
+    state.selectedCluster = null;
+    state.selected = targets[0].report_no;
+    await loadReports({ keepDetail: true });
+    renderDetail();
+    $("#list-status").textContent = `가까운 ${targets.length}건을 같은 구역으로 함께 배정했습니다.`;
+  } catch (error) {
+    message.textContent = error.message;
+    document.querySelectorAll("[data-cluster-assign], .assignment button, .reason-actions button").forEach((button) => { button.disabled = false; });
+  }
 }
 
 function renderDetail() {
@@ -227,8 +423,10 @@ async function runAction(reportNo, payload) {
     const filtered = getFiltered();
     const nextUnassigned = payload.action === "assign" ? filtered.find((candidate) => candidate.status === "RECEIVED" && candidate.report_no !== reportNo) : null;
     state.selected = nextUnassigned ? nextUnassigned.report_no : reportNo;
+    renderClusters();
     renderList();
     renderDetail();
+    renderReportMap();
     $("#list-status").textContent = payload.action === "assign" ? (nextUnassigned ? "배정을 완료하고 다음 미배정 건으로 이동했습니다." : "배정을 완료했습니다.") : "처리를 완료했습니다.";
   } catch (error) {
     message.textContent = error.message;
@@ -246,6 +444,7 @@ async function loadReports({ quiet = false, keepDetail = false } = {}) {
     if (Array.isArray(data.zones) && data.zones.length) state.zones = data.zones;
     renderMetrics(state.allReports);
     renderZoneCounts(state.allReports);
+    refreshClusters({ keepSelection: keepDetail });
     renderList();
     renderReportMap();
     if (!keepDetail) renderDetail();
@@ -255,9 +454,9 @@ async function loadReports({ quiet = false, keepDetail = false } = {}) {
 }
 
 function setupReception() {
-  $("#request-search").addEventListener("input", debounce(() => { state.filters.q = $("#request-search").value; renderList(); }, 200));
-  $("#status-filter").addEventListener("change", () => { state.filters.status = $("#status-filter").value; renderList(); });
-  $("#payment-filter")?.addEventListener("change", () => { state.filters.payment = $("#payment-filter").value; renderList(); });
+  $("#request-search").addEventListener("input", debounce(() => { state.filters.q = $("#request-search").value; renderList(); renderReportMap(); }, 200));
+  $("#status-filter").addEventListener("change", () => { state.filters.status = $("#status-filter").value; renderList(); renderReportMap(); });
+  $("#payment-filter")?.addEventListener("change", () => { state.filters.payment = $("#payment-filter").value; renderList(); renderReportMap(); });
   $("#zone-reset").addEventListener("click", () => { state.filters.zone = ""; renderZoneCounts(state.allReports); renderList(); renderReportMap(); });
   document.querySelectorAll(".zone-chip").forEach((marker) => marker.addEventListener("click", () => {
     state.filters.zone = state.filters.zone === marker.dataset.zone ? "" : marker.dataset.zone;
@@ -349,17 +548,6 @@ function updateFieldTaskMap(report, userCoords) {
   } else {
     fieldTaskMap.setView(JECHEON_CENTER, 13);
   }
-}
-
-function calculateDistanceMeters(lat1, lon1, lat2, lon2) {
-  const R = 6371000;
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLon = (lon2 - lon1) * Math.PI / 180;
-  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-            Math.sin(dLon / 2) * Math.sin(dLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return Math.round(R * c);
 }
 
 function renderFieldEmpty(message) {
