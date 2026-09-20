@@ -7,6 +7,7 @@ import {
   sendJson,
   ZONES
 } from "../../lib/supabase.js";
+import { isPaymentCompleted, unpaidAssignError } from "../../lib/payment.js";
 
 export default async function handler(req, res) {
   if (req.method !== "PATCH") {
@@ -27,13 +28,13 @@ export default async function handler(req, res) {
     if (isSupabaseConfigured && supabase) {
       const { data } = await supabase
         .from("reports")
-        .select("report_no, status, after_photo")
+        .select("report_no, status, payment_status, after_photo")
         .eq("report_no", reportNo)
         .maybeSingle();
       existing = data;
     } else {
       const db = getLocalDb();
-      existing = db.prepare("SELECT report_no, status, after_photo FROM reports WHERE report_no = ?").get(reportNo);
+      existing = db.prepare("SELECT report_no, status, payment_status, after_photo FROM reports WHERE report_no = ?").get(reportNo);
     }
 
     if (!existing) return sendJson(res, 404, { error: "신고 건을 찾을 수 없습니다." });
@@ -53,6 +54,7 @@ export default async function handler(req, res) {
 
     if (body.action === "assign") {
       if (!ZONES.includes(body.zone)) return sendJson(res, 400, { error: "수거구역을 선택해 주세요." });
+      if (!isPaymentCompleted(existing.payment_status)) return sendJson(res, 409, { error: unpaidAssignError() });
       const assignee = typeof body.assignee === "string" ? body.assignee.trim() || null : null;
       updates = { status: "ASSIGNED", zone: body.zone, assignee, memo: null, updated_at: updatedAt };
       auditAction = "ASSIGNED";

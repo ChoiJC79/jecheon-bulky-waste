@@ -46,12 +46,12 @@ flowchart TD
    - 스티커 구매 방문 없이 약 3분 만에 온라인 신고 및 접수번호 발급
    - 스마트 품목 검색 (초성·동의어 지원) 및 규격별 예상 수수료 자동 계산
    - 지도 기반 배출 위치 지정 및 배출 현장 사진 촬영/등록
-   - 간편결제(카카오·네이버·토스), 신용카드, 무통장입금, 현금결제 지원
+              - 계좌이체 전용 납부 (시 지정 계좌 안내, 입금 확인 후 수거 배정)
    - 접수번호 기반 실시간 수거 진행 상태 및 수거 완료 사진 확인
 
 2. **🖥️ 접수 담당자 대시보드 (`/staff.html`)**
    - 실시간 신규 접수 현황 모니터링 및 3대 수거구역(청전·의림, 중앙·교동, 하소·영천) 차량 배정
-   - 보완 요청 및 부적합 신고 반려 처리, 현금 납부 건 수납 확인
+   - 보완 요청 및 부적합 신고 반려 처리, 계좌이체 입금 확인
    - 전체 신고 내역 CSV 엑셀 다운로드
    - 데이터 정합성 검증 탭: 미배정 장기 대기건, 위치 누락건 등 사전 탐지
 
@@ -96,7 +96,11 @@ flowchart TD
    SUPABASE_ANON_KEY=your-anon-key
    SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
    SUPABASE_STORAGE_BUCKET=waste-photos
+   PAYMENT_BANK_NAME=(시 지정 은행)
+   PAYMENT_ACCOUNT_HOLDER=제천시 (대형폐기물 수수료)
+   PAYMENT_ACCOUNT_NUMBER=000-00-000000
    ```
+   계좌 정보는 시에서 실제 수납 계좌로 교체하세요. 기본값은 `payment-account.json`의 자리표시자입니다.
 5. **Deploy** 버튼을 클릭하면 1분 이내에 배포가 완료됩니다!
 
 ---
@@ -126,6 +130,7 @@ npm test
 │   ├── health.js                  # 헬스체크
 │   ├── staff-assignees.js         # 담당자 및 구역 목록
 │   ├── verification.js            # 데이터 정합성 검증 API
+│   ├── payment-account.js         # GET(계좌이체 수납 계좌 안내)
 │   ├── reports/
 │   │   ├── index.js               # GET(목록) / POST(신규 신고 접수)
 │   │   ├── export.js              # GET(CSV 내보내기)
@@ -133,7 +138,9 @@ npm test
 │   │       ├── index.js           # GET(단건 상세조회)
 │   │       └── status.js          # PATCH(배정, 완료, 미수거 등 상태변경)
 │   └── lib/
-│       └── supabase.js            # Supabase 클라이언트 & SQLite 폴백
+│       ├── supabase.js            # Supabase 클라이언트 & SQLite 폴백
+│       └── payment.js             # 계좌이체 전용 납부 규칙
+├── payment-account.json           # 시 지정 수납 계좌 (자리표시자, 시에서 교체)
 ├── supabase/                      # Supabase 설정 및 마이그레이션
 │   ├── config.toml                # Supabase CLI 설정
 │   ├── migrations/                # PostgreSQL DDL & RLS 정책

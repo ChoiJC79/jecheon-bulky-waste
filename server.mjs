@@ -4,6 +4,13 @@ import { readFile, stat, mkdir, writeFile } from "node:fs/promises";
 import { join, normalize, extname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DatabaseSync } from "node:sqlite";
+import {
+  getBankTransferAccount,
+  isAllowedPaymentMethod,
+  isPaymentCompleted,
+  paymentStatusForNewReport,
+  unpaidAssignError
+} from "./api/lib/payment.js";
 
 const root = process.cwd();
 await mkdir(join(root, "data"), { recursive: true });
@@ -57,6 +64,7 @@ async function parseBody(req) {
 async function api(req, res, url) {
   const path = url.pathname;
   if (req.method === "GET" && path === "/api/health") return send(res, 200, { ok: true });
+  if (req.method === "GET" && path === "/api/payment-account") return send(res, 200, getBankTransferAccount());
   if (req.method === "GET" && path === "/api/staff-assignees") {
     const rows = db.prepare("SELECT DISTINCT assignee FROM reports WHERE assignee IS NOT NULL AND assignee != ''").all();
     const existing = rows.map((r) => r.assignee);
@@ -85,6 +93,7 @@ async function api(req, res, url) {
     const updatedAt = new Date().toISOString();
     if (body.action === "assign") {
       if (!ZONES.includes(body.zone)) return send(res, 400, { error: "수거구역을 선택해 주세요." });
+      if (!isPaymentCompleted(existing.payment_status)) return send(res, 409, { error: unpaidAssignError() });
       const assignee = typeof body.assignee === "string" ? body.assignee.trim() || null : null;
       db.prepare("UPDATE reports SET status = 'ASSIGNED', zone = ?, assignee = ?, memo = NULL, updated_at = ? WHERE report_no = ?").run(body.zone, assignee, updatedAt, reportNo);
       db.prepare("INSERT INTO audit_logs (report_no, action, actor_role, created_at) VALUES (?, 'ASSIGNED', 'RECEPTION', ?)").run(reportNo, updatedAt);
@@ -190,13 +199,13 @@ async function api(req, res, url) {
   try {
     const { address, addressDetail, paymentMethod, location, items, beforePhoto } = await parseBody(req);
     const validItems = Array.isArray(items) && items.length && items.every((item) => item.name && item.option && Number.isInteger(item.quantity) && item.quantity > 0 && Number.isInteger(item.fee) && item.fee >= 0);
-    if (!address || !addressDetail || !["kakaopay", "naverpay", "tosspay", "card", "transfer", "cash"].includes(paymentMethod) || !validItems) return send(res, 400, { error: "주소, 상세 장소, 결제수단, 품목을 확인해 주세요." });
+    if (!address || !addressDetail || !isAllowedPaymentMethod(paymentMethod) || !validItems) return send(res, 400, { error: "주소, 상세 장소, 품목을 확인해 주세요. 납부는 계좌이체만 가능합니다." });
     const latitude = Number.isFinite(location?.latitude) ? location.latitude : null; const longitude = Number.isFinite(location?.longitude) ? location.longitude : null;
     const reportNo = `JC-${new Date().toISOString().slice(0, 10).replaceAll("-", "")}-${String(Date.now()).slice(-6)}`;
     const beforePhotoPath = beforePhoto ? await savePhoto(beforePhoto, `${reportNo}-before`) : null;
     const createdAt = new Date().toISOString();
     const totalFee = items.reduce((sum, item) => sum + item.fee * item.quantity, 0);
-    const paymentStatus = paymentMethod === "cash" ? "PENDING_CASH_RECEIPT" : (paymentMethod === "transfer" ? "PENDING_TRANSFER" : "COMPLETED");
+    const paymentStatus = paymentStatusForNewReport();
     db.exec("BEGIN");
     try {
       db.prepare("INSERT INTO reports (report_no, status, payment_method, payment_status, address, address_detail, latitude, longitude, before_photo, total_fee, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").run(reportNo, "RECEIVED", paymentMethod, paymentStatus, address, addressDetail, latitude, longitude, beforePhotoPath, totalFee, createdAt, createdAt);
