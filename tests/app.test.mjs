@@ -92,3 +92,28 @@ test("현장 업무 화면은 지도 표시, 실제 거리 계산, 길찾기, �
   assert.match(app, /action: "field_change"/);
 });
 
+test("현장 태블릿은 오늘 배정·경로 보기, 사진 완료 확인, 외부 길찾기, 미납·특이사항을 제공한다", async () => {
+  const html = await readFile(new URL("../tablet.html", import.meta.url), "utf8");
+  const app = await readFile(new URL("../tablet.js", import.meta.url), "utf8");
+  assert.match(html, /id="task-list-container"/);
+  assert.match(html, /id="tablet-map"/);
+  assert.match(html, /id="btn-map-route"/);
+  assert.match(html, /id="btn-next-stop"/);
+  assert.match(html, /id="btn-next-stop-bar"/);
+  assert.match(html, /id="route-stepper"/);
+  assert.match(html, /id="btn-navigate-kakao"/);
+  assert.match(html, /id="btn-navigate-naver"/);
+  assert.match(html, /id="btn-navigate-google"/);
+  assert.match(html, /id="btn-geo-refresh"/);
+  assert.match(html, /id="stage-unpaid-alert"/);
+  assert.match(html, /id="stage-notes-alert"/);
+  assert.match(html, /id="modal-complete-photo"/);
+  assert.match(html, /id="btn-confirm-complete"/);
+  assert.match(html, /capture="environment"/);
+  assert.match(app, /filterFieldJobs/);
+  assert.match(app, /action: "complete", afterPhoto/);
+  assert.match(app, /visibilitychange/);
+  assert.match(app, /watchPosition/);
+  assert.match(app, /서버에 저장하지 않습니다/);
+});
+
