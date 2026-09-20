@@ -424,7 +424,8 @@ function renderMainStage(report) {
   const distTag = $("#stage-dist-tag");
   let dist = null;
   if (state.userCoords && Number.isFinite(report.latitude) && Number.isFinite(report.longitude)) {
-    dist = calculateDistanceMeters(state.userCoords.latitude, state.userCoords.longitude, report.latitude, report.longitude);
+    const meters = calculateDistanceMeters(state.userCoords.latitude, state.userCoords.longitude, report.latitude, report.longitude);
+    dist = meters != null && meters <= 20000 ? meters : null;
   }
   if (dist !== null) {
     if (dist <= 60) {
@@ -435,7 +436,7 @@ function renderMainStage(report) {
       distTag.className = "map-dist-tag";
     }
   } else {
-    distTag.textContent = report.latitude ? "현재 위치 확인 중…" : "신고 좌표 없음";
+    distTag.textContent = report.latitude ? "신고 위치" : "신고 좌표 없음";
     distTag.className = "map-dist-tag";
   }
 
