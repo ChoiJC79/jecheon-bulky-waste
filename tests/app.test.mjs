@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
 
 test("신고 화면은 품목, 위치, 결제 입력 요소를 포함한다", async () => {
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
@@ -107,5 +108,12 @@ test("현장 업무 화면은 지도 표시, 실제 거리 계산, 길찾기, �
   assert.match(app, /updateFieldTaskMap/);
   assert.match(app, /action: "uncollect"/);
   assert.match(app, /action: "field_change"/);
+});
+
+test("시민·접수·태블릿 스크립트는 문법 오류가 없다", () => {
+  for (const file of ["app.js", "staff.js", "tablet.js"]) {
+    const result = spawnSync(process.execPath, ["--check", file], { encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr || `${file} 문법 오류`);
+  }
 });
 
