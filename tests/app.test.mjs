@@ -53,6 +53,7 @@ test("사무실 전화 접수는 입력·자동이체 확인·태블릿 전송 �
   const html = await readFile(new URL("../staff.html", import.meta.url), "utf8");
   const intake = await readFile(new URL("../office-intake.js", import.meta.url), "utf8");
   const tablet = await readFile(new URL("../tablet.html", import.meta.url), "utf8");
+  const tabletCss = await readFile(new URL("../tablet.css", import.meta.url), "utf8");
   assert.match(html, /id="intake-form"/);
   assert.match(html, /id="intake-citizen-name"/);
   assert.match(html, /id="intake-map"/);
@@ -66,6 +67,7 @@ test("사무실 전화 접수는 입력·자동이체 확인·태블릿 전송 �
   assert.match(intake, /action: "assign"/);
   assert.match(intake, /paymentMethod: "transfer"/);
   assert.match(tablet, /현장 수거 태블릿/);
+  assert.match(tabletCss, /\[hidden\] \{ display: none !important; \}/);
 });
 
 test("시민 신고 화면은 배출 위치 사진 촬영과 접수번호 조회를 지원한다", async () => {

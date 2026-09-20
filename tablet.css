@@ -26,6 +26,8 @@
   --tb-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
+[hidden] { display: none !important; }
+
 /* 야외 직사광선 고대비 모드 */
 body.outdoor-contrast {
   --tb-bg: #ffffff;
