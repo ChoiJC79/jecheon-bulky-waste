@@ -99,6 +99,8 @@ test("현장 태블릿은 오늘 배정·경로 보기, 사진 완료 확인, �
   assert.match(html, /id="tablet-map"/);
   assert.match(html, /id="btn-map-route"/);
   assert.match(html, /id="btn-next-stop"/);
+  assert.match(html, /id="btn-next-stop-bar"/);
+  assert.match(html, /id="route-stepper"/);
   assert.match(html, /id="btn-navigate-kakao"/);
   assert.match(html, /id="btn-navigate-naver"/);
   assert.match(html, /id="btn-navigate-google"/);

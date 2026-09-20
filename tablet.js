@@ -452,10 +452,19 @@ function renderMainStage(report) {
   const sequenced = orderedTasks();
   const seqIndex = sequenced.findIndex((task) => task.report_no === report.report_no);
   const pendingCount = sequenced.filter((task) => task.status !== "COLLECTED").length;
-  $("#stage-seq-label").textContent = seqIndex >= 0 ? `${seqIndex + 1} / ${sequenced.length}` : "-";
-  $("#btn-prev-stop").disabled = !prevPending(sequenced, report.report_no);
-  $("#btn-next-stop").disabled = !nextPending(sequenced, report.report_no);
-  $("#btn-next-stop").textContent = pendingCount ? "다음 정류 →" : "다음 없음";
+  const seqText = seqIndex >= 0 ? `${seqIndex + 1} / ${sequenced.length}` : "-";
+  $("#stage-seq-label").textContent = seqText;
+  const upcoming = nextPending(sequenced, report.report_no);
+  const previous = prevPending(sequenced, report.report_no);
+  $("#btn-prev-stop").disabled = !previous;
+  $("#btn-next-stop").disabled = !upcoming;
+  $("#btn-next-stop").textContent = upcoming ? "다음 정류 →" : "다음 없음";
+  $("#stage-seq-label-bar").textContent = seqText;
+  $("#stage-next-hint").textContent = upcoming
+    ? `다음: ${upcoming.address}`
+    : (pendingCount <= 1 ? "이 경로의 마지막 미완료 건입니다." : "다음 미완료 정류가 없습니다.");
+  $("#btn-prev-stop-bar").disabled = !previous;
+  $("#btn-next-stop-bar").disabled = !upcoming;
 
   $("#stage-report-no").textContent = report.report_no;
   $("#stage-status-badge").textContent = STATUS_LABEL[report.status] || report.status;
@@ -918,15 +927,19 @@ function setupHeaderTools() {
     });
   });
 
-  $("#btn-prev-stop").addEventListener("click", () => {
+  const goPrev = () => {
     const prev = prevPending(orderedTasks(), state.selectedReportNo);
     if (prev) selectTask(prev.report_no);
-  });
-  $("#btn-next-stop").addEventListener("click", () => {
+  };
+  const goNext = () => {
     const next = nextPending(orderedTasks(), state.selectedReportNo);
     if (next) selectTask(next.report_no);
     else showToast("다음 미완료 정류가 없습니다.");
-  });
+  };
+  $("#btn-prev-stop").addEventListener("click", goPrev);
+  $("#btn-next-stop").addEventListener("click", goNext);
+  $("#btn-prev-stop-bar").addEventListener("click", goPrev);
+  $("#btn-next-stop-bar").addEventListener("click", goNext);
 
   $("#btn-close-zoom").addEventListener("click", () => closeDialog($("#modal-image-zoom")));
 }
