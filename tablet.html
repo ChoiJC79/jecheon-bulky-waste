@@ -26,6 +26,8 @@
 
       <div class="tablet-header-tools">
         <span class="sync-time" id="sync-time-display">동기화 대기</span>
+        <button type="button" class="tablet-btn-tool" id="btn-geo-refresh" title="이 기기에서만 쓰는 현재 위치 새로고침">📍 내 위치</button>
+        <span class="geo-status" id="geo-status-display">위치 대기</span>
         <button type="button" class="tablet-btn-tool" id="btn-refresh" title="수거 목록 새로고침">🔄 새로고침</button>
         <button type="button" class="tablet-btn-tool" id="btn-contrast" title="야외 직사광선 고대비 모드">☀️ 고대비</button>
         <button type="button" class="tablet-btn-tool" id="btn-voice" title="음성 안내 ON/OFF">🔊 음성 켜짐</button>
@@ -40,12 +42,13 @@
       <aside class="tablet-sidebar">
         <div class="progress-banner" id="today-progress-card">
           <div class="progress-meta">
-            <h2>오늘의 수거 현황</h2>
+            <h2 id="today-progress-title">오늘의 수거 현황</h2>
             <span class="progress-count" id="progress-text">0 / 0건 (0%)</span>
           </div>
           <div class="progress-bar-track">
             <div class="progress-bar-fill" id="progress-bar-fill"></div>
           </div>
+          <p class="progress-hint" id="assignee-scope-hint">담당자를 지정하면 오늘 내 배정 건만 보입니다.</p>
         </div>
 
         <div class="list-filter-bar">
@@ -55,12 +58,13 @@
             <button type="button" class="filter-tab" data-filter="ALL">전체 <b id="count-all">0</b></button>
           </div>
           <select class="sort-select" id="sort-order" aria-label="정렬 순서">
-            <option value="distance">🧭 가까운 순</option>
+            <option value="route">🗺️ 경로 순</option>
+            <option value="zone">📍 구역 순</option>
             <option value="time">⏱️ 접수 순</option>
           </select>
         </div>
 
-        <div class="task-list" id="task-list-container" role="region" aria-label="수거 대상 목록">
+        <div class="task-list" id="task-list-container" role="region" aria-label="오늘 배정된 수거 대상 목록">
           <!-- 자바스크립트로 작업 카드 동적 렌더링 -->
         </div>
       </aside>
@@ -71,7 +75,7 @@
         <div class="stage-empty" id="stage-empty-view" hidden>
           <div class="empty-icon">🎉</div>
           <h3>배정된 수거 작업을 모두 완료했거나 작업이 없습니다.</h3>
-          <p>새로 배정된 건이 있는지 [새로고침]을 누르거나 좌측에서 '완료' 탭을 확인하세요.</p>
+          <p>담당자를 확인한 뒤 [새로고침]을 누르거나 좌측에서 '완료' 탭을 확인하세요.</p>
         </div>
 
         <!-- 2) 활성 작업 화면 -->
@@ -81,6 +85,7 @@
             <div class="banner-info">
               <div class="banner-report-no">
                 <span id="stage-report-no">JC-000000</span>
+                <span id="stage-status-badge" class="card-status-badge badge-assigned">배정완료</span>
                 <span id="stage-payment-badge" class="badge-assigned">결제완료</span>
                 <span id="stage-zone-badge" style="font-size:13px;color:var(--tb-muted)">청전·의림</span>
               </div>
@@ -88,11 +93,26 @@
               <div class="banner-detail-badge" id="stage-address-detail">상세 배출 위치 확인 중…</div>
             </div>
             <div class="banner-nav-action">
-              <button type="button" class="btn-nav-kakao" id="btn-navigate-kakao">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3c-5.523 0-10 3.582-10 8 0 2.828 1.83 5.315 4.622 6.708l-.946 3.491c-.083.308.26.558.528.384l4.24-2.775c.504.058 1.023.092 1.556.092 5.523 0 10-3.582 10-8s-4.477-8-10-8z"/></svg>
-                카카오맵 길찾기
-              </button>
+              <div class="nav-seq-row">
+                <button type="button" class="btn-seq-nav" id="btn-prev-stop">← 이전</button>
+                <span class="nav-seq-label" id="stage-seq-label">1 / 1</span>
+                <button type="button" class="btn-seq-nav" id="btn-next-stop">다음 정류 →</button>
+              </div>
+              <div class="nav-app-row">
+                <button type="button" class="btn-nav-kakao" id="btn-navigate-kakao">카카오 길찾기</button>
+                <button type="button" class="btn-nav-naver" id="btn-navigate-naver">네이버 길찾기</button>
+                <button type="button" class="btn-nav-google" id="btn-navigate-google">구글 길찾기</button>
+              </div>
             </div>
+          </div>
+
+          <div class="stage-alert unpaid-alert" id="stage-unpaid-alert" hidden>
+            <strong id="stage-unpaid-title">미납 · 수납 대기</strong>
+            <span id="stage-unpaid-text">접수처에서 입금·수납이 확인되지 않았습니다. 현장 수거는 가능하나 특이사항으로 확인하세요.</span>
+          </div>
+          <div class="stage-alert notes-alert" id="stage-notes-alert" hidden>
+            <strong id="stage-notes-title">특이사항</strong>
+            <span id="stage-notes-text"></span>
           </div>
 
           <!-- 중앙 2열 컨텐츠 (지도 + 사진/품목) -->
@@ -100,10 +120,17 @@
             <!-- 좌: 현장 지도 -->
             <div class="stage-map-card">
               <div class="map-card-head">
-                <h4>신고 위치 & 현재 내 위치</h4>
-                <span class="map-dist-tag" id="stage-dist-tag">위치 확인 중…</span>
+                <h4>신고 위치 · 오늘 경로</h4>
+                <div class="map-head-tools">
+                  <div class="map-mode-tabs">
+                    <button type="button" class="map-mode-tab active" data-map-mode="current" id="btn-map-current">현재 건</button>
+                    <button type="button" class="map-mode-tab" data-map-mode="route" id="btn-map-route">오늘 경로</button>
+                  </div>
+                  <span class="map-dist-tag" id="stage-dist-tag">위치 확인 중…</span>
+                </div>
               </div>
               <div id="tablet-map" class="tablet-map-canvas" aria-label="수거 위치 및 내 위치 지도"></div>
+              <p class="map-geo-hint" id="map-geo-hint">위치는 이 기기에서 다음 정류를 찾는 데만 쓰이며, 서버에 저장하지 않습니다.</p>
             </div>
 
             <!-- 우: 시민 사진 & 품목 확인 -->
@@ -136,7 +163,7 @@
           <div class="tablet-action-dock">
             <button type="button" class="btn-complete-giant" id="btn-tablet-complete">
               <span style="font-size:26px;">📸</span>
-              <span>사진 찍고 즉시 수거 완료</span>
+              <span>사진 찍고 수거 완료</span>
             </button>
             <button type="button" class="btn-uncollected-tablet" id="btn-tablet-uncollected">
               <span>⚠️ 미수거 등록</span>
@@ -159,7 +186,7 @@
         </h3>
         <p style="font-size:14px;color:var(--tb-muted);margin:0;">
           이 태블릿을 운용할 수거 차량 또는 담당 기사님을 선택해 주세요.<br />
-          설정된 정보는 기기에 자동 저장되어 켜자마자 전용 작업 목록이 열립니다.
+          설정된 정보는 기기에 자동 저장되어 켜자마자 오늘 배정 목록이 열립니다.
         </p>
         <div class="modal-chip-grid" id="assignee-preset-grid">
           <label class="modal-chip-radio">
@@ -286,7 +313,28 @@
       </div>
     </dialog>
 
-    <!-- 4) 사진 확대 모달 -->
+    <!-- 4) 수거 완료 사진 확인 -->
+    <dialog class="tablet-modal" id="modal-complete-photo">
+      <div class="modal-inner">
+        <h3 class="modal-title">
+          <span>📸 수거 완료 사진 확인</span>
+          <button type="button" class="modal-close-btn" id="btn-close-complete">×</button>
+        </h3>
+        <p style="font-size:14px;color:var(--tb-muted);margin:0;">
+          현장 사진은 필수입니다. 미리보기에서 확인한 뒤 완료 처리하세요.
+        </p>
+        <div class="complete-photo-frame">
+          <img id="complete-photo-img" alt="수거 완료 사진 미리보기" />
+        </div>
+        <p class="complete-photo-hint" id="complete-photo-hint">이 사진으로 수거 완료할까요?</p>
+        <div class="modal-actions">
+          <button type="button" class="btn-modal-cancel" id="btn-retake-complete">다시 촬영</button>
+          <button type="button" class="btn-modal-submit" id="btn-confirm-complete">수거 완료 확정</button>
+        </div>
+      </div>
+    </dialog>
+
+    <!-- 5) 사진 확대 모달 -->
     <dialog class="tablet-modal" id="modal-image-zoom" style="max-width:800px;background:#000;">
       <div style="position:relative;padding:10px;">
         <button type="button" id="btn-close-zoom" style="position:absolute;top:14px;right:14px;background:rgba(255,255,255,0.8);border:none;border-radius:50%;width:36px;height:36px;font-size:22px;cursor:pointer;z-index:10;">×</button>
@@ -299,6 +347,6 @@
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     <script src="photo.js"></script>
-    <script src="tablet.js"></script>
+    <script type="module" src="tablet.js"></script>
   </body>
 </html>

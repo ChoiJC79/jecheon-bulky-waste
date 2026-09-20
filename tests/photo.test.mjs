@@ -212,3 +212,72 @@ test("시민이 현금결제로 신고하면 현금수납대기(PENDING_CASH_REC
     assert.equal(afterData.report.payment_status, "COMPLETED");
   });
 });
+
+test("태블릿용 배정 목록 API는 담당자 기준으로 현장 건을 걸러 주고 결제·메모를 포함한다", async () => {
+  await withServer(async (base) => {
+    const driverA = "김수거 (1호차·청전의림)";
+    const driverB = "이청소 (2호차·중앙교동)";
+
+    const createA = await fetch(`${base}/api/reports`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        address: "충청북도 제천시 의병대로 123",
+        addressDetail: "101동 앞 분리수거장 옆",
+        paymentMethod: "transfer",
+        location: { latitude: 37.1425, longitude: 128.2114 },
+        items: [{ name: "소파", option: "1인용", fee: 3000, quantity: 1 }]
+      })
+    });
+    assert.equal(createA.status, 201);
+    const { reportNo: a1 } = await createA.json();
+    const assignA = await fetch(`${base}/api/reports/${a1}/status`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "assign", zone: "청전·의림", assignee: driverA })
+    });
+    assert.equal(assignA.status, 200);
+
+    const createB = await fetch(`${base}/api/reports`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        address: "충청북도 제천시 중앙로 45",
+        addressDetail: "상가 뒤편 골목 전신주 앞",
+        paymentMethod: "cash",
+        location: { latitude: 37.135, longitude: 128.208 },
+        items: [{ name: "의자", option: "회전의자", fee: 5000, quantity: 1 }]
+      })
+    });
+    assert.equal(createB.status, 201);
+    const { reportNo: b1 } = await createB.json();
+    const assignB = await fetch(`${base}/api/reports/${b1}/status`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "assign", zone: "중앙·교동", assignee: driverB })
+    });
+    assert.equal(assignB.status, 200);
+
+    const mineRes = await fetch(`${base}/api/reports?assignee=${encodeURIComponent(driverA)}`);
+    assert.equal(mineRes.status, 200);
+    const mine = await mineRes.json();
+    const nos = mine.reports.map((r) => r.report_no);
+    assert.ok(nos.includes(a1));
+    assert.equal(nos.includes(b1), false);
+    const mineReport = mine.reports.find((r) => r.report_no === a1);
+    assert.equal(mineReport.status, "ASSIGNED");
+    assert.equal(mineReport.payment_status, "PENDING_TRANSFER");
+    assert.equal(mineReport.address_detail, "101동 앞 분리수거장 옆");
+    assert.ok("memo" in mineReport);
+
+    const changeRes = await fetch(`${base}/api/reports/${a1}/status`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "field_change", reason: "4인용 소파로 규격 상이" })
+    });
+    assert.equal(changeRes.status, 200);
+    const after = await changeRes.json();
+    assert.equal(after.report.memo, "4인용 소파로 규격 상이");
+    assert.equal(after.report.status, "CHANGE_REQUESTED");
+  });
+});
