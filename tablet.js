@@ -101,7 +101,12 @@ function updateMap(report, userCoords) {
     state.reportMarker = null;
   }
 
-  if (userCoords && Number.isFinite(userCoords.latitude) && Number.isFinite(userCoords.longitude)) {
+  const distToUser = report && userCoords
+    ? calculateDistanceMeters(report.latitude, report.longitude, userCoords.latitude, userCoords.longitude)
+    : null;
+  const userIsNearby = distToUser !== null && distToUser <= 20000;
+
+  if (userIsNearby) {
     const uPos = [userCoords.latitude, userCoords.longitude];
     points.push(uPos);
     if (!state.userMarker) {
@@ -116,6 +121,9 @@ function updateMap(report, userCoords) {
       state.userMarker.setLatLng(uPos);
     }
     state.userMarker.bindTooltip("🚜 현재 내 태블릿 위치", { direction: "bottom", offset: [0, 8] });
+  } else if (state.userMarker) {
+    state.map.removeLayer(state.userMarker);
+    state.userMarker = null;
   }
 
   if (points.length === 2) {
@@ -283,7 +291,8 @@ function getFilteredAndSortedTasks() {
   // 2) 거리 계산 붙이기
   list.forEach((t) => {
     if (state.userCoords && Number.isFinite(t.latitude) && Number.isFinite(t.longitude)) {
-      t._distance = calculateDistanceMeters(state.userCoords.latitude, state.userCoords.longitude, t.latitude, t.longitude);
+      const meters = calculateDistanceMeters(state.userCoords.latitude, state.userCoords.longitude, t.latitude, t.longitude);
+      t._distance = meters != null && meters <= 20000 ? meters : null;
     } else {
       t._distance = null;
     }
