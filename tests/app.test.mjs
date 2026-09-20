@@ -34,6 +34,7 @@ test("품목 카탈로그는 분류와 카드·계좌이체·현금 결제 안�
 test("내부 업무 화면은 접수·현장·데이터 검증 역할을 제공한다", async () => {
   const html = await readFile(new URL("../staff.html", import.meta.url), "utf8");
   const app = await readFile(new URL("../staff.js", import.meta.url), "utf8");
+  assert.match(html, /전화 접수/);
   assert.match(html, /접수·배정/);
   assert.match(html, /현장 처리/);
   assert.match(html, /데이터 검증/);
@@ -46,6 +47,25 @@ test("내부 업무 화면은 접수·현장·데이터 검증 역할을 제공�
   assert.match(app, /buildNearbyClusters/);
   assert.match(app, /assignClusterTogether/);
   assert.match(app, /setInterval\(\(\) => loadReports\(\{ quiet: true, keepDetail: true \}\), 30000\)/);
+});
+
+test("사무실 전화 접수는 입력·자동이체 확인·태블릿 전송 절차를 제공한다", async () => {
+  const html = await readFile(new URL("../staff.html", import.meta.url), "utf8");
+  const intake = await readFile(new URL("../office-intake.js", import.meta.url), "utf8");
+  const tablet = await readFile(new URL("../tablet.html", import.meta.url), "utf8");
+  assert.match(html, /id="intake-form"/);
+  assert.match(html, /id="intake-citizen-name"/);
+  assert.match(html, /id="intake-map"/);
+  assert.match(html, /id="transfer-confirm-btn"/);
+  assert.match(html, /id="dispatch-send-btn"/);
+  assert.match(html, /사무실 PC 전용 전화 접수/);
+  assert.match(html, /담당자에게 전송 \(태블릿\)/);
+  assert.match(html, /href="tablet.html"/);
+  assert.match(intake, /channel: "PHONE"/);
+  assert.match(intake, /action: "confirm_transfer"/);
+  assert.match(intake, /action: "assign"/);
+  assert.match(intake, /paymentMethod: "transfer"/);
+  assert.match(tablet, /현장 수거 태블릿/);
 });
 
 test("시민 신고 화면은 배출 위치 사진 촬영과 접수번호 조회를 지원한다", async () => {

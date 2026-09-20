@@ -6,6 +6,7 @@ import {
   formatClusterDistance,
   suggestClusterAssignment
 } from "./nearby-clusters.js";
+import { setupOfficeIntake, refreshOfficeIntake } from "./office-intake.js";
 
 const capturePhoto = (...args) => globalThis.capturePhoto(...args);
 
@@ -72,12 +73,12 @@ function renderMetrics(all) {
   const todayStr = new Date().toISOString().slice(0, 10);
   const today = all.filter((report) => report.created_at.slice(0, 10) === todayStr).length;
   const unassigned = all.filter((report) => report.status === "RECEIVED").length;
-  const pendingCash = all.filter((report) => report.payment_status === "PENDING_CASH_RECEIPT").length;
+  const pendingPay = all.filter((report) => report.payment_status === "PENDING_CASH_RECEIPT" || report.payment_status === "PENDING_TRANSFER").length;
   const assigned = all.filter((report) => report.status === "ASSIGNED").length;
   const attentionCount = all.filter((report) => ["UNCOLLECTED", "CHANGE_REQUESTED", "SUPPLEMENT_REQUESTED"].includes(report.status)).length;
   const cards = [
     ["오늘 접수", today, `전체 ${all.length}건 중`, false],
-    ["현금수납대기", pendingCash, pendingCash ? "지정 수납처 수납 확인이 필요합니다." : "대기 건이 없습니다.", pendingCash > 0],
+    ["입금·수납대기", pendingPay, pendingPay ? "자동이체 또는 현금 수납 확인이 필요합니다." : "대기 건이 없습니다.", pendingPay > 0],
     ["미배정", unassigned, "수거구역 배정이 필요합니다.", unassigned > 0],
     ["배정완료", assigned, "수거 예정으로 전달되었습니다.", false],
     ["확인 필요", attentionCount, attentionCount ? "미수거·현장변경 건 확인이 필요합니다." : "확인 건이 없습니다.", attentionCount > 0]
@@ -167,15 +168,19 @@ function renderList() {
     const itemSummary = report.items.map((item) => item.name).join(" · ") || "품목 정보 없음";
     const badgeClass = report.status === "RECEIVED" ? "badge-warn" : report.status === "ASSIGNED" ? "badge-ok" : "badge-alert";
     const isPendingCash = report.payment_status === "PENDING_CASH_RECEIPT";
+    const isPendingTransfer = report.payment_status === "PENDING_TRANSFER";
     const paymentBadge = isPendingCash
       ? `<span class="badge-tag badge-cash">💵 현금수납대기</span>`
-      : `<span class="badge-tag badge-pay-ok">${report.payment_method === "cash" ? "현금완료" : "결제완료"}</span>`;
+      : isPendingTransfer
+        ? `<span class="badge-tag badge-cash">자동이체 대기</span>`
+        : `<span class="badge-tag badge-pay-ok">${report.payment_method === "cash" ? "현금완료" : "결제완료"}</span>`;
+    const channelBadge = report.channel === "PHONE" ? `<span class="badge-tag badge-phone">전화접수</span>` : "";
     const inCluster = clusterMemberNos().has(report.report_no);
     return `<button class="request-row ${report.report_no === state.selected ? "active" : ""} ${inCluster ? "in-cluster" : ""}" type="button" data-report="${report.report_no}">
       <span>
         <strong>${escapeHtml(report.address)}</strong>
         <small>${escapeHtml(itemSummary)} · ${won.format(report.total_fee)}원</small>
-        <span class="request-badges">${paymentBadge}</span>
+        <span class="request-badges">${channelBadge}${paymentBadge}</span>
       </span>
       <i class="${badgeClass}">${STATUS_LABEL[report.status] || report.status}</i>
       <b>›</b>
@@ -305,8 +310,8 @@ async function assignClusterTogether(card) {
     message.textContent = "함께 배정할 미배정 건이 없습니다.";
     return;
   }
-  const pendingCash = targets.filter((report) => report.payment_status === "PENDING_CASH_RECEIPT");
-  if (pendingCash.length && !confirm(`⚠️ 이 묶음에 현금 수납이 확인되지 않은 건이 ${pendingCash.length}건 있습니다.\n수납 확인 전에 같은 구역으로 함께 배정하시겠습니까?`)) {
+  const pendingPay = targets.filter((report) => report.payment_status === "PENDING_CASH_RECEIPT" || report.payment_status === "PENDING_TRANSFER");
+  if (pendingPay.length && !confirm(`⚠️ 이 묶음에 입금·수납이 확인되지 않은 건이 ${pendingPay.length}건 있습니다.\n확인 전에 같은 구역으로 함께 배정하시겠습니까?`)) {
     return;
   }
   message.textContent = `${targets.length}건을 함께 배정하고 있습니다…`;
@@ -339,6 +344,7 @@ function renderDetail() {
   const itemsHtml = report.items.length ? report.items.map((item) => `<li><span>${escapeHtml(item.name)} · ${escapeHtml(item.option_name)}</span><b>${item.quantity}개 · ${won.format(item.unit_fee * item.quantity)}원</b></li>`).join("") : "<li>등록된 품목이 없습니다.</li>";
   const location = report.latitude != null && report.longitude != null ? `${report.latitude.toFixed(5)}, ${report.longitude.toFixed(5)}` : "좌표 미확인";
   const isPendingCash = report.payment_status === "PENDING_CASH_RECEIPT";
+  const isPendingTransfer = report.payment_status === "PENDING_TRANSFER";
 
   const cashConfirmBlock = isPendingCash ? `
     <div class="cash-confirm-panel">
@@ -348,9 +354,18 @@ function renderDetail() {
       </div>
       <button class="button primary" type="button" id="confirm-payment-btn">현금 수납 확인 (결제완료 처리)</button>
     </div>` : "";
+  const transferConfirmBlock = isPendingTransfer ? `
+    <div class="cash-confirm-panel">
+      <div class="cash-confirm-info">
+        <strong>자동이체 입금 확인 대기 (수수료: ${won.format(report.total_fee)}원)</strong>
+        <p>시범 화면입니다. 실제 PG 조회 없이, 통장·이체내역에서 입금이 확인되면 아래 버튼으로 처리하세요. 계좌 비밀번호는 받지 않습니다.</p>
+      </div>
+      <button class="button primary" type="button" id="confirm-transfer-btn">자동이체 입금 확인</button>
+    </div>` : "";
 
   const actions = report.status === "REJECTED" || report.status === "COLLECTED" ? "" : `
     ${cashConfirmBlock}
+    ${transferConfirmBlock}
     <div class="assignment">
       <label>수거구역<select id="assign-zone">${state.zones.map((zone) => `<option value="${escapeHtml(zone)}" ${report.zone === zone ? "selected" : ""}>${escapeHtml(zone)}</option>`).join("")}</select></label>
       <label>수거 담당자<input id="assign-name" type="text" placeholder="담당자명 (선택)" value="${report.assignee ? escapeHtml(report.assignee) : ""}" /></label>
@@ -369,8 +384,10 @@ function renderDetail() {
     </div>
     <div class="detail-data">
       <span><b>결제수단</b>${PAYMENT_METHOD_LABEL[report.payment_method] || report.payment_method || "기타"}</span>
-      <span><b>결제상태</b><i class="badge-tag ${isPendingCash ? 'badge-cash' : 'badge-pay-ok'}">${PAYMENT_LABEL[report.payment_status] || report.payment_status}</i></span>
+      <span><b>결제상태</b><i class="badge-tag ${isPendingCash || isPendingTransfer ? 'badge-cash' : 'badge-pay-ok'}">${PAYMENT_LABEL[report.payment_status] || report.payment_status}</i></span>
       <span><b>총 수수료</b>${won.format(report.total_fee)}원</span>
+      <span><b>접수 경로</b>${report.channel === "PHONE" ? "전화 접수 (사무실)" : "시민 웹"}</span>
+      <span><b>신고자</b>${report.citizen_name ? `${escapeHtml(report.citizen_name)} · ${escapeHtml(report.citizen_phone || "")}` : "미입력"}</span>
       <span><b>위치 좌표</b>${location}</span>
       <span><b>접수일시</b>${new Date(report.created_at).toLocaleString("ko-KR")}</span>
       <span><b>배정 구역</b>${report.zone ? escapeHtml(report.zone) : "미배정"}</span>
@@ -390,11 +407,16 @@ function renderDetail() {
       runAction(report.report_no, { action: "confirm_payment" });
     });
   }
+  if (isPendingTransfer) {
+    $("#confirm-transfer-btn")?.addEventListener("click", () => {
+      runAction(report.report_no, { action: "confirm_transfer" });
+    });
+  }
 
   if (report.status === "REJECTED" || report.status === "COLLECTED") return;
 
   $("#assign-request").addEventListener("click", () => {
-    if (isPendingCash && !confirm("⚠️ 아직 현금 수납이 확인되지 않은 건입니다.\n수납 확인 전에 수거구역을 먼저 배정하시겠습니까?")) {
+    if ((isPendingCash || isPendingTransfer) && !confirm("⚠️ 아직 입금·수납이 확인되지 않은 건입니다.\n확인 전에 수거구역을 먼저 배정하시겠습니까?")) {
       return;
     }
     runAction(report.report_no, { action: "assign", zone: $("#assign-zone").value, assignee: $("#assign-name").value });
@@ -493,7 +515,11 @@ function setupTabs() {
   document.querySelectorAll("[data-tab]").forEach((tab) => tab.addEventListener("click", () => {
     document.querySelectorAll("[data-tab]").forEach((other) => other.setAttribute("aria-selected", String(other === tab)));
     document.querySelectorAll(".staff-panel").forEach((panel) => { const active = panel.id === tab.dataset.tab; panel.hidden = !active; panel.classList.toggle("active", active); });
-    if (tab.dataset.tab === "reception") loadReports({ quiet: true, keepDetail: true });
+    if (tab.dataset.tab === "intake") refreshOfficeIntake();
+    if (tab.dataset.tab === "reception") {
+      loadReports({ quiet: true, keepDetail: true });
+      if (staffMap) setTimeout(() => staffMap.invalidateSize(), 80);
+    }
     if (tab.dataset.tab === "field") loadFieldQueue();
     if (tab.dataset.tab === "verify") loadVerification();
   }));
@@ -829,4 +855,4 @@ $("#after-photo-input").addEventListener("change", async (event) => {
 
 $("#refresh-verification").addEventListener("click", () => { loadVerification(); $("#refresh-verification").textContent = "방금 검증했습니다"; });
 
-setupReception(); setupTabs();
+setupReception(); setupTabs(); setupOfficeIntake({ onReportsChanged: () => loadReports({ quiet: true, keepDetail: true }) });

@@ -24,11 +24,11 @@ async function savePhoto(dataUrl, filenameBase) {
 const ZONES = ["청전·의림", "중앙·교동", "하소·영천"];
 db.exec(`CREATE TABLE IF NOT EXISTS reports (report_no TEXT PRIMARY KEY, status TEXT NOT NULL, payment_method TEXT NOT NULL, payment_status TEXT NOT NULL, address TEXT NOT NULL, address_detail TEXT NOT NULL, latitude REAL, longitude REAL, zone TEXT, assignee TEXT, memo TEXT, total_fee INTEGER NOT NULL, created_at TEXT NOT NULL, updated_at TEXT); CREATE TABLE IF NOT EXISTS report_items (id INTEGER PRIMARY KEY AUTOINCREMENT, report_no TEXT NOT NULL, name TEXT NOT NULL, option_name TEXT NOT NULL, quantity INTEGER NOT NULL, unit_fee INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS audit_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, report_no TEXT NOT NULL, action TEXT NOT NULL, actor_role TEXT NOT NULL, created_at TEXT NOT NULL);`);
 const reportColumns = db.prepare("PRAGMA table_info(reports)").all().map((column) => column.name);
-for (const [column, type] of [["latitude", "REAL"], ["longitude", "REAL"], ["zone", "TEXT"], ["assignee", "TEXT"], ["memo", "TEXT"], ["updated_at", "TEXT"], ["before_photo", "TEXT"], ["after_photo", "TEXT"]]) {
+for (const [column, type] of [["latitude", "REAL"], ["longitude", "REAL"], ["zone", "TEXT"], ["assignee", "TEXT"], ["memo", "TEXT"], ["updated_at", "TEXT"], ["before_photo", "TEXT"], ["after_photo", "TEXT"], ["citizen_name", "TEXT"], ["citizen_phone", "TEXT"], ["channel", "TEXT"]]) {
   if (!reportColumns.includes(column)) db.exec(`ALTER TABLE reports ADD COLUMN ${column} ${type}`);
 }
 const send = (res, status, body) => { res.writeHead(status, { "content-type": "application/json; charset=utf-8" }); res.end(JSON.stringify(body)); };
-const reportSelect = "SELECT report_no, status, payment_method, payment_status, address, address_detail, latitude, longitude, zone, assignee, memo, before_photo, after_photo, total_fee, created_at, updated_at FROM reports";
+const reportSelect = "SELECT report_no, status, payment_method, payment_status, address, address_detail, latitude, longitude, zone, assignee, memo, before_photo, after_photo, total_fee, created_at, updated_at, citizen_name, citizen_phone, channel FROM reports";
 function listReports({ status, zone, assignee, q } = {}) {
   const clauses = []; const params = [];
   if (status) { clauses.push("status = ?"); params.push(status); }
@@ -118,7 +118,7 @@ async function api(req, res, url) {
       const proofPhoto = body.proofPhoto || body.afterPhoto ? await savePhoto(body.proofPhoto || body.afterPhoto, `${reportNo}-fieldchange`) : null;
       db.prepare("UPDATE reports SET status = 'CHANGE_REQUESTED', memo = ?, after_photo = COALESCE(?, after_photo), updated_at = ? WHERE report_no = ?").run(reason, proofPhoto, updatedAt, reportNo);
       db.prepare("INSERT INTO audit_logs (report_no, action, actor_role, created_at) VALUES (?, 'CHANGE_REQUESTED', 'FIELD', ?)").run(reportNo, updatedAt);
-    } else if (body.action === "confirm_payment" || body.action === "confirm_cash") {
+    } else if (body.action === "confirm_payment" || body.action === "confirm_cash" || body.action === "confirm_transfer") {
       db.prepare("UPDATE reports SET payment_status = 'COMPLETED', updated_at = ? WHERE report_no = ?").run(updatedAt, reportNo);
       db.prepare("INSERT INTO audit_logs (report_no, action, actor_role, created_at) VALUES (?, 'PAYMENT_CONFIRMED', 'RECEPTION', ?)").run(reportNo, updatedAt);
     } else {
@@ -188,9 +188,13 @@ async function api(req, res, url) {
   }
   if (req.method !== "POST" || path !== "/api/reports") return send(res, 404, { error: "요청한 API를 찾을 수 없습니다." });
   try {
-    const { address, addressDetail, paymentMethod, location, items, beforePhoto } = await parseBody(req);
+    const { address, addressDetail, paymentMethod, location, items, beforePhoto, channel: rawChannel, citizenName, citizenPhone } = await parseBody(req);
     const validItems = Array.isArray(items) && items.length && items.every((item) => item.name && item.option && Number.isInteger(item.quantity) && item.quantity > 0 && Number.isInteger(item.fee) && item.fee >= 0);
     if (!address || !addressDetail || !["kakaopay", "naverpay", "tosspay", "card", "transfer", "cash"].includes(paymentMethod) || !validItems) return send(res, 400, { error: "주소, 상세 장소, 결제수단, 품목을 확인해 주세요." });
+    const channel = rawChannel === "PHONE" ? "PHONE" : "WEB";
+    const name = typeof citizenName === "string" ? citizenName.trim().slice(0, 80) : "";
+    const phone = typeof citizenPhone === "string" ? citizenPhone.trim().slice(0, 40) : "";
+    if (channel === "PHONE" && (!name || !phone)) return send(res, 400, { error: "신고자 이름과 연락처를 입력해 주세요." });
     const latitude = Number.isFinite(location?.latitude) ? location.latitude : null; const longitude = Number.isFinite(location?.longitude) ? location.longitude : null;
     const reportNo = `JC-${new Date().toISOString().slice(0, 10).replaceAll("-", "")}-${String(Date.now()).slice(-6)}`;
     const beforePhotoPath = beforePhoto ? await savePhoto(beforePhoto, `${reportNo}-before`) : null;
@@ -199,10 +203,10 @@ async function api(req, res, url) {
     const paymentStatus = paymentMethod === "cash" ? "PENDING_CASH_RECEIPT" : (paymentMethod === "transfer" ? "PENDING_TRANSFER" : "COMPLETED");
     db.exec("BEGIN");
     try {
-      db.prepare("INSERT INTO reports (report_no, status, payment_method, payment_status, address, address_detail, latitude, longitude, before_photo, total_fee, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").run(reportNo, "RECEIVED", paymentMethod, paymentStatus, address, addressDetail, latitude, longitude, beforePhotoPath, totalFee, createdAt, createdAt);
+      db.prepare("INSERT INTO reports (report_no, status, payment_method, payment_status, address, address_detail, latitude, longitude, before_photo, total_fee, created_at, updated_at, citizen_name, citizen_phone, channel) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").run(reportNo, "RECEIVED", paymentMethod, paymentStatus, address, addressDetail, latitude, longitude, beforePhotoPath, totalFee, createdAt, createdAt, name || null, phone || null, channel);
       const insertItem = db.prepare("INSERT INTO report_items (report_no, name, option_name, quantity, unit_fee) VALUES (?, ?, ?, ?, ?)");
       items.forEach((item) => insertItem.run(reportNo, item.name, item.option, item.quantity, item.fee));
-      db.prepare("INSERT INTO audit_logs (report_no, action, actor_role, created_at) VALUES (?, ?, ?, ?)").run(reportNo, "REPORT_CREATED", "CITIZEN", createdAt);
+      db.prepare("INSERT INTO audit_logs (report_no, action, actor_role, created_at) VALUES (?, ?, ?, ?)").run(reportNo, "REPORT_CREATED", channel === "PHONE" ? "RECEPTION" : "CITIZEN", createdAt);
       db.exec("COMMIT");
     } catch (error) { db.exec("ROLLBACK"); throw error; }
     return send(res, 201, { reportNo, totalFee, paymentStatus });

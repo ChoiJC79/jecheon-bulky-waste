@@ -62,7 +62,8 @@ export function getLocalDb() {
     for (const [col, type] of [
       ["latitude", "REAL"], ["longitude", "REAL"], ["zone", "TEXT"],
       ["assignee", "TEXT"], ["memo", "TEXT"], ["updated_at", "TEXT"],
-      ["before_photo", "TEXT"], ["after_photo", "TEXT"]
+      ["before_photo", "TEXT"], ["after_photo", "TEXT"],
+      ["citizen_name", "TEXT"], ["citizen_phone", "TEXT"], ["channel", "TEXT"]
     ]) {
       if (!reportColumns.includes(col)) {
         localDb.exec(`ALTER TABLE reports ADD COLUMN ${col} ${type}`);

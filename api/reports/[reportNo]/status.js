@@ -103,7 +103,7 @@ export default async function handler(req, res) {
       };
       auditAction = "CHANGE_REQUESTED";
       auditRole = "FIELD";
-    } else if (body.action === "confirm_payment" || body.action === "confirm_cash") {
+    } else if (body.action === "confirm_payment" || body.action === "confirm_cash" || body.action === "confirm_transfer") {
       updates = { payment_status: "COMPLETED", updated_at: updatedAt };
       auditAction = "PAYMENT_CONFIRMED";
       auditRole = "RECEPTION";
@@ -131,7 +131,7 @@ export default async function handler(req, res) {
           report_no, status, payment_method, payment_status,
           address, address_detail, latitude, longitude,
           zone, assignee, memo, before_photo, after_photo,
-          total_fee, created_at, updated_at,
+          total_fee, created_at, updated_at, citizen_name, citizen_phone, channel,
           report_items ( name, option_name, quantity, unit_fee )
         `)
         .eq("report_no", reportNo)
@@ -156,13 +156,13 @@ export default async function handler(req, res) {
       db.prepare("UPDATE reports SET status = 'COLLECTED', after_photo = ?, memo = NULL, updated_at = ? WHERE report_no = ?").run(updates.after_photo, updatedAt, reportNo);
     } else if (body.action === "uncollect" || body.action === "field_change") {
       db.prepare("UPDATE reports SET status = ?, memo = ?, after_photo = COALESCE(?, after_photo), updated_at = ? WHERE report_no = ?").run(updates.status, updates.memo, updates.after_photo || null, updatedAt, reportNo);
-    } else if (body.action === "confirm_payment" || body.action === "confirm_cash") {
+    } else if (body.action === "confirm_payment" || body.action === "confirm_cash" || body.action === "confirm_transfer") {
       db.prepare("UPDATE reports SET payment_status = 'COMPLETED', updated_at = ? WHERE report_no = ?").run(updatedAt, reportNo);
     }
 
     db.prepare("INSERT INTO audit_logs (report_no, action, actor_role, created_at) VALUES (?, ?, ?, ?)").run(reportNo, auditAction, auditRole, updatedAt);
 
-    const reportSelect = "SELECT report_no, status, payment_method, payment_status, address, address_detail, latitude, longitude, zone, assignee, memo, before_photo, after_photo, total_fee, created_at, updated_at FROM reports";
+    const reportSelect = "SELECT report_no, status, payment_method, payment_status, address, address_detail, latitude, longitude, zone, assignee, memo, before_photo, after_photo, total_fee, created_at, updated_at, citizen_name, citizen_phone, channel FROM reports";
     const report = db.prepare(`${reportSelect} WHERE report_no = ?`).get(reportNo);
     report.items = db.prepare("SELECT name, option_name, quantity, unit_fee FROM report_items WHERE report_no = ?").all(reportNo);
 

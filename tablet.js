@@ -346,7 +346,7 @@ function renderSidebarList() {
       <article class="task-card ${isActive ? "active" : ""} ${isCollected ? "status-collected" : ""}" data-no="${escapeHtml(task.report_no)}">
         <div class="card-top">
           <span class="card-seq">#${idx + 1} · ${escapeHtml(task.report_no.slice(-6))}</span>
-          <span class="card-status-badge ${statusClass[task.status] || "badge-assigned"}">${statusLabel[task.status] || task.status}</span>
+          <span class="card-status-badge ${statusClass[task.status] || "badge-assigned"}">${statusLabel[task.status] || task.status}${task.channel === "PHONE" ? " · 전화" : ""}</span>
         </div>
         <div class="card-address">${escapeHtml(task.address)}</div>
         <div class="card-detail-loc">📍 ${escapeHtml(task.address_detail)}</div>
@@ -387,11 +387,15 @@ function renderMainStage(report) {
 
   // 1) 배너 정보
   $("#stage-report-no").textContent = report.report_no;
-  $("#stage-payment-badge").textContent = report.payment_status === "COMPLETED" ? "결제완료" : (report.payment_status === "PENDING_CASH_RECEIPT" ? "현금수납대기" : "결제대기");
+  $("#stage-payment-badge").textContent = report.channel === "PHONE"
+    ? (report.payment_status === "COMPLETED" ? "전화접수 · 결제완료" : "전화접수")
+    : (report.payment_status === "COMPLETED" ? "결제완료" : (report.payment_status === "PENDING_CASH_RECEIPT" ? "현금수납대기" : "결제대기"));
   $("#stage-payment-badge").className = `card-status-badge ${report.payment_status === "COMPLETED" ? "badge-collected" : "badge-change"}`;
   $("#stage-zone-badge").textContent = report.zone ? `구역: ${report.zone}` : "구역 미지정";
   $("#stage-address").textContent = report.address;
-  $("#stage-address-detail").textContent = `📍 배출위치: ${report.address_detail}`;
+  $("#stage-address-detail").textContent = report.citizen_name
+    ? `📍 배출위치: ${report.address_detail} · 신고자 ${report.citizen_name}`
+    : `📍 배출위치: ${report.address_detail}`;
 
   // 2) 카카오맵 길찾기 버튼
   const navBtn = $("#btn-navigate-kakao");
