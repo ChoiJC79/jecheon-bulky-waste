@@ -387,7 +387,7 @@ function renderMainStage(report) {
 
   // 1) 배너 정보
   $("#stage-report-no").textContent = report.report_no;
-  $("#stage-payment-badge").textContent = report.payment_status === "COMPLETED" ? "결제완료" : (report.payment_status === "PENDING_CASH_RECEIPT" ? "현금수납대기" : "결제대기");
+  $("#stage-payment-badge").textContent = report.payment_status === "COMPLETED" ? "결제완료" : (report.payment_status === "PENDING_TRANSFER" ? "계좌입금대기" : (report.payment_status === "PENDING_CASH_RECEIPT" ? "현금수납대기" : "결제대기"));
   $("#stage-payment-badge").className = `card-status-badge ${report.payment_status === "COMPLETED" ? "badge-collected" : "badge-change"}`;
   $("#stage-zone-badge").textContent = report.zone ? `구역: ${report.zone}` : "구역 미지정";
   $("#stage-address").textContent = report.address;

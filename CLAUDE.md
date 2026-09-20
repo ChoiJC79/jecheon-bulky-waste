@@ -33,6 +33,7 @@
      - `GET /api/reports/export.csv`: 정합성 검증용 CSV 다운로드
      - `GET /api/verification`: 데이터 정합성 검증 집계 API
      - `GET /api/staff-assignees`: 수거구역 및 차량 담당자 목록
+     - `GET /api/payment-account`: 계좌이체 수납 계좌 안내
      - `GET /api/health`: 헬스체크
 
 4. **로컬 개발 및 테스트 호환성**:

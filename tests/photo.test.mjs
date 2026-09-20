@@ -19,7 +19,7 @@ test("신고자가 등록한 배출 위치 사진은 저장되고, 담당자가 
       body: JSON.stringify({
         address: "제천시 의림대로 00",
         addressDetail: "테스트 분리수거장",
-        paymentMethod: "card",
+        paymentMethod: "transfer",
         location: null,
         items: [{ name: "소파", option: "1인용", fee: 3000, quantity: 1 }],
         beforePhoto: TINY_JPEG
@@ -27,8 +27,9 @@ test("신고자가 등록한 배출 위치 사진은 저장되고, 담당자가 
     });
     assert.equal(createRes.status, 201);
     const created = await createRes.json();
-    const { reportNo } = created;
+    const { reportNo, paymentStatus } = created;
     assert.match(reportNo, /^JC-\d{8}-\d{6}$/);
+    assert.equal(paymentStatus, "PENDING_TRANSFER");
 
     const afterCreateLookup = await fetch(`${base}/api/reports/${reportNo}`);
     const afterCreateBody = await afterCreateLookup.json();
@@ -45,6 +46,23 @@ test("신고자가 등록한 배출 위치 사진은 저장되고, 담당자가 
       body: JSON.stringify({ action: "complete", afterPhoto: TINY_JPEG })
     });
     assert.equal(completeBeforeAssignRes.status, 409, "배정 전 건은 수거 완료 처리할 수 없어야 한다");
+
+    const unpaidAssignRes = await fetch(`${base}/api/reports/${reportNo}/status`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "assign", zone: "청전·의림", assignee: "테스트담당자" })
+    });
+    assert.equal(unpaidAssignRes.status, 409, "입금 확인 전에는 수거구역을 배정할 수 없어야 한다");
+
+    const confirmRes = await fetch(`${base}/api/reports/${reportNo}/status`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "confirm_payment" })
+    });
+    assert.equal(confirmRes.status, 200);
+    const confirmed = await confirmRes.json();
+    assert.equal(confirmed.report.payment_status, "COMPLETED");
+    assert.equal(confirmed.report.payment_method, "transfer");
 
     const assignRes = await fetch(`${base}/api/reports/${reportNo}/status`, {
       method: "PATCH",
@@ -89,7 +107,7 @@ test("현장 담당자는 미수거 및 현장변경을 사유·사진과 함께
       body: JSON.stringify({
         address: "제천시 의림대로 123",
         addressDetail: "정문 분리수거장",
-        paymentMethod: "kakaopay",
+        paymentMethod: "transfer",
         location: { latitude: 37.1326, longitude: 128.1910 },
         items: [{ name: "침대", option: "프레임", fee: 5000, quantity: 1 }],
         beforePhoto: TINY_JPEG
@@ -97,6 +115,20 @@ test("현장 담당자는 미수거 및 현장변경을 사유·사진과 함께
     });
     assert.equal(createRes.status, 201);
     const { reportNo } = await createRes.json();
+
+    const unpaidAssignRes = await fetch(`${base}/api/reports/${reportNo}/status`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "assign", zone: "중앙·교동", assignee: "이현장" })
+    });
+    assert.equal(unpaidAssignRes.status, 409);
+
+    const confirmRes = await fetch(`${base}/api/reports/${reportNo}/status`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "confirm_payment" })
+    });
+    assert.equal(confirmRes.status, 200);
 
     const assignRes = await fetch(`${base}/api/reports/${reportNo}/status`, {
       method: "PATCH",
@@ -161,42 +193,38 @@ test("현장 담당자는 미수거 및 현장변경을 사유·사진과 함께
   });
 });
 
-test("시민이 현금결제로 신고하면 현금수납대기(PENDING_CASH_RECEIPT)로 저장되고, 담당자가 수납 확인 처리(COMPLETED)할 수 있다", async () => {
+test("시민이 계좌이체로 신고하면 계좌입금대기(PENDING_TRANSFER)로 저장되고, 담당자가 입금 확인 처리(COMPLETED)할 수 있다", async () => {
   await withServer(async (base) => {
-    // 1. 신고자가 현금결제로 신고 등록
     const createRes = await fetch(`${base}/api/reports`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         address: "제천시 의림대로 50",
         addressDetail: "행정복지센터 앞",
-        paymentMethod: "cash",
+        paymentMethod: "transfer",
         location: { latitude: 37.132, longitude: 128.192 },
         items: [{ name: "소파", option: "1인용", fee: 3000, quantity: 1 }]
       })
     });
     assert.equal(createRes.status, 201);
     const { reportNo, paymentStatus, totalFee } = await createRes.json();
-    assert.equal(paymentStatus, "PENDING_CASH_RECEIPT");
+    assert.equal(paymentStatus, "PENDING_TRANSFER");
     assert.equal(totalFee, 3000);
 
-    // 2. 단건 조회 시 payment_method와 payment_status 확인
     const lookupRes = await fetch(`${base}/api/reports/${reportNo}`);
     assert.equal(lookupRes.status, 200);
     const lookupData = await lookupRes.json();
-    assert.equal(lookupData.report.payment_method, "cash");
-    assert.equal(lookupData.report.payment_status, "PENDING_CASH_RECEIPT");
+    assert.equal(lookupData.report.payment_method, "transfer");
+    assert.equal(lookupData.report.payment_status, "PENDING_TRANSFER");
     assert.equal(lookupData.report.status, "RECEIVED");
 
-    // 3. 접수 담당자 목록 조회에 포함 확인
     const listRes = await fetch(`${base}/api/reports`);
     assert.equal(listRes.status, 200);
     const listData = await listRes.json();
-    const cashReport = listData.reports.find((r) => r.report_no === reportNo);
-    assert.ok(cashReport, "목록에 현금 결제 건이 조회되어야 한다");
-    assert.equal(cashReport.payment_status, "PENDING_CASH_RECEIPT");
+    const transferReport = listData.reports.find((r) => r.report_no === reportNo);
+    assert.ok(transferReport, "목록에 계좌이체 건이 조회되어야 한다");
+    assert.equal(transferReport.payment_status, "PENDING_TRANSFER");
 
-    // 4. 수납 담당자가 현금 수납 확인 처리
     const confirmRes = await fetch(`${base}/api/reports/${reportNo}/status`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
@@ -206,9 +234,43 @@ test("시민이 현금결제로 신고하면 현금수납대기(PENDING_CASH_REC
     const confirmedData = await confirmRes.json();
     assert.equal(confirmedData.report.payment_status, "COMPLETED");
 
-    // 5. 수납 완료 후 단건 조회
     const afterLookup = await fetch(`${base}/api/reports/${reportNo}`);
     const afterData = await afterLookup.json();
     assert.equal(afterData.report.payment_status, "COMPLETED");
+
+    const assignRes = await fetch(`${base}/api/reports/${reportNo}/status`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "assign", zone: "청전·의림", assignee: "김담당" })
+    });
+    assert.equal(assignRes.status, 200);
+    assert.equal((await assignRes.json()).report.status, "ASSIGNED");
+  });
+});
+
+test("카드·카카오페이·현금 등 다른 납부 수단은 접수할 수 없고, 계좌 안내 API를 제공한다", async () => {
+  await withServer(async (base) => {
+    const payload = {
+      address: "제천시 의림대로 1",
+      addressDetail: "정문",
+      location: null,
+      items: [{ name: "소파", option: "1인용", fee: 3000, quantity: 1 }]
+    };
+    for (const paymentMethod of ["card", "kakaopay", "naverpay", "tosspay", "cash"]) {
+      const res = await fetch(`${base}/api/reports`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ...payload, paymentMethod })
+      });
+      assert.equal(res.status, 400, `${paymentMethod}는 거부되어야 한다`);
+    }
+
+    const accountRes = await fetch(`${base}/api/payment-account`);
+    assert.equal(accountRes.status, 200);
+    const account = await accountRes.json();
+    assert.equal(account.accountHolder.includes("제천시"), true);
+    assert.ok(account.bankName);
+    assert.ok(account.accountNumber);
+    assert.equal(account.placeholder, true);
   });
 });

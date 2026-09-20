@@ -344,7 +344,7 @@ select:focus { border-color: var(--accent); outline: 0; }
 .leaflet-control-zoom a { color: var(--accent-ink) !important; border-radius: 2px !important; }
 .leaflet-control-attribution { font-size: 9px !important; }
 
-/* 결제 수단 선택 */
+/* 결제 수단 선택 — 계좌이체 전용 */
 .payment-options { display: grid; gap: 8px; list-style: none; margin: 0; padding: 0; border: 0; }
 .payment-group-label { margin: 6px 0 -2px; font-size: .78rem; color: var(--muted); font-weight: 700; }
 .payment-group-label:first-child { margin-top: 0; }
@@ -352,7 +352,8 @@ select:focus { border-color: var(--accent); outline: 0; }
   display: flex; gap: 10px; align-items: flex-start; padding: 13px 14px; border-radius: var(--radius-xs);
   background: #ffffff; border: 1px solid var(--line); transition: border-color .12s, background-color .12s;
 }
-.payment-option:has(input:checked) {
+.payment-option:has(input:checked),
+.bank-transfer-option {
   border-color: var(--accent); background: var(--accent-soft); border-width: 1.5px;
 }
 .payment-option b, .payment-option small { display: block; }
@@ -362,6 +363,25 @@ select:focus { border-color: var(--accent); outline: 0; }
   margin-top: 12px; padding: 12px 14px; border-radius: var(--radius-xs);
   background: var(--warn-soft); border: 1px solid var(--warn-border);
   color: var(--warn); font-size: .82rem; line-height: 1.55;
+}
+
+.bank-transfer-box {
+  margin-top: 12px; padding: 14px; border-radius: var(--radius-xs);
+  background: #ffffff; border: 1px solid var(--line);
+}
+.bank-placeholder-note {
+  margin: 0 0 10px; padding: 8px 10px; border-radius: var(--radius-xs);
+  background: #fffbeb; border: 1px solid #fde68a; color: #92400e;
+  font-size: .78rem; line-height: 1.45;
+}
+.bank-transfer-details { margin: 0; display: grid; gap: 8px; }
+.bank-transfer-details > div { display: flex; justify-content: space-between; gap: 12px; align-items: center; font-size: .84rem; }
+.bank-transfer-details dt { color: var(--muted); font-weight: 700; }
+.bank-transfer-details dd { margin: 0; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+.assign-payment-note {
+  margin: -4px 0 12px; padding: 8px 12px; border-radius: var(--radius-xs);
+  background: #fffbeb; border: 1px solid #fde68a; color: #92400e;
+  font-size: .8rem; line-height: 1.45;
 }
 
 .settlement-notice { margin: 14px 0 0; }

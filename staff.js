@@ -54,16 +54,28 @@ function getFiltered() {
   });
 }
 
+function isUnpaid(report) {
+  return report.payment_status !== "COMPLETED";
+}
+
+function paymentBadgeHtml(report) {
+  if (!isUnpaid(report)) {
+    return `<span class="badge-tag badge-pay-ok">결제완료</span>`;
+  }
+  const label = PAYMENT_LABEL[report.payment_status] || "입금대기";
+  return `<span class="badge-tag badge-cash">${label}</span>`;
+}
+
 function renderMetrics(all) {
   const todayStr = new Date().toISOString().slice(0, 10);
   const today = all.filter((report) => report.created_at.slice(0, 10) === todayStr).length;
   const unassigned = all.filter((report) => report.status === "RECEIVED").length;
-  const pendingCash = all.filter((report) => report.payment_status === "PENDING_CASH_RECEIPT").length;
+  const pendingTransfer = all.filter((report) => report.payment_status !== "COMPLETED").length;
   const assigned = all.filter((report) => report.status === "ASSIGNED").length;
   const attentionCount = all.filter((report) => ["UNCOLLECTED", "CHANGE_REQUESTED", "SUPPLEMENT_REQUESTED"].includes(report.status)).length;
   const cards = [
     ["오늘 접수", today, `전체 ${all.length}건 중`, false],
-    ["현금수납대기", pendingCash, pendingCash ? "지정 수납처 수납 확인이 필요합니다." : "대기 건이 없습니다.", pendingCash > 0],
+    ["입금대기", pendingTransfer, pendingTransfer ? "계좌 입금 확인 후 수거구역을 배정할 수 있습니다." : "대기 건이 없습니다.", pendingTransfer > 0],
     ["미배정", unassigned, "수거구역 배정이 필요합니다.", unassigned > 0],
     ["배정완료", assigned, "수거 예정으로 전달되었습니다.", false],
     ["확인 필요", attentionCount, attentionCount ? "미수거·현장변경 건 확인이 필요합니다." : "확인 건이 없습니다.", attentionCount > 0]
@@ -114,10 +126,7 @@ function renderList() {
   $("#request-list").innerHTML = filtered.map((report) => {
     const itemSummary = report.items.map((item) => item.name).join(" · ") || "품목 정보 없음";
     const badgeClass = report.status === "RECEIVED" ? "badge-warn" : report.status === "ASSIGNED" ? "badge-ok" : "badge-alert";
-    const isPendingCash = report.payment_status === "PENDING_CASH_RECEIPT";
-    const paymentBadge = isPendingCash
-      ? `<span class="badge-tag badge-cash">💵 현금수납대기</span>`
-      : `<span class="badge-tag badge-pay-ok">${report.payment_method === "cash" ? "현금완료" : "결제완료"}</span>`;
+    const paymentBadge = paymentBadgeHtml(report);
     return `<button class="request-row ${report.report_no === state.selected ? "active" : ""}" type="button" data-report="${report.report_no}">
       <span>
         <strong>${escapeHtml(report.address)}</strong>
@@ -142,24 +151,28 @@ function renderDetail() {
   if (!report) { drawer.innerHTML = "<p>왼쪽 목록에서 신고 건을 선택하면 품목, 위치, 결제 상태를 확인하고 수거구역을 배정하거나 보완요청·반려를 처리할 수 있습니다.</p>"; return; }
   const itemsHtml = report.items.length ? report.items.map((item) => `<li><span>${escapeHtml(item.name)} · ${escapeHtml(item.option_name)}</span><b>${item.quantity}개 · ${won.format(item.unit_fee * item.quantity)}원</b></li>`).join("") : "<li>등록된 품목이 없습니다.</li>";
   const location = report.latitude != null && report.longitude != null ? `${report.latitude.toFixed(5)}, ${report.longitude.toFixed(5)}` : "좌표 미확인";
+  const unpaid = isUnpaid(report);
   const isPendingCash = report.payment_status === "PENDING_CASH_RECEIPT";
 
-  const cashConfirmBlock = isPendingCash ? `
+  const paymentConfirmBlock = unpaid ? `
     <div class="cash-confirm-panel">
       <div class="cash-confirm-info">
-        <strong>💵 현금 수납 확인 대기 (수수료: ${won.format(report.total_fee)}원)</strong>
-        <p>신고자가 지정 수납처(행정복지센터 등)에 현금을 납부했는지 확인한 뒤, 아래 버튼을 눌러 수납 완료 처리해 주세요.</p>
+        <strong>${isPendingCash ? "현금 수납 확인 대기" : "계좌 입금 확인 대기"} (수수료: ${won.format(report.total_fee)}원)</strong>
+        <p>${isPendingCash
+          ? "신고자가 지정 수납처에 현금을 납부했는지 확인한 뒤, 아래 버튼을 눌러 수납 완료 처리해 주세요. 납부 확인 전에는 수거구역을 배정할 수 없습니다."
+          : "시민이 안내된 시 지정 계좌로 이체했는지 확인한 뒤, 입금 확인을 눌러 주세요. 입금 확인 전에는 수거구역을 배정할 수 없습니다."}</p>
       </div>
-      <button class="button primary" type="button" id="confirm-payment-btn">현금 수납 확인 (결제완료 처리)</button>
+      <button class="button primary" type="button" id="confirm-payment-btn">${isPendingCash ? "현금 수납 확인 (결제완료 처리)" : "입금 확인 (결제완료 처리)"}</button>
     </div>` : "";
 
   const actions = report.status === "REJECTED" || report.status === "COLLECTED" ? "" : `
-    ${cashConfirmBlock}
+    ${paymentConfirmBlock}
     <div class="assignment">
-      <label>수거구역<select id="assign-zone">${state.zones.map((zone) => `<option value="${escapeHtml(zone)}" ${report.zone === zone ? "selected" : ""}>${escapeHtml(zone)}</option>`).join("")}</select></label>
-      <label>수거 담당자<input id="assign-name" type="text" placeholder="담당자명 (선택)" value="${report.assignee ? escapeHtml(report.assignee) : ""}" /></label>
-      <button class="button secondary" type="button" id="assign-request">${report.status === "ASSIGNED" ? "재배정" : "수거구역 배정"}</button>
+      <label>수거구역<select id="assign-zone" ${unpaid ? "disabled" : ""}>${state.zones.map((zone) => `<option value="${escapeHtml(zone)}" ${report.zone === zone ? "selected" : ""}>${escapeHtml(zone)}</option>`).join("")}</select></label>
+      <label>수거 담당자<input id="assign-name" type="text" placeholder="담당자명 (선택)" value="${report.assignee ? escapeHtml(report.assignee) : ""}" ${unpaid ? "disabled" : ""} /></label>
+      <button class="button secondary" type="button" id="assign-request" ${unpaid ? "disabled" : ""}>${report.status === "ASSIGNED" ? "재배정" : "수거구역 배정"}</button>
     </div>
+    ${unpaid ? `<p class="assign-payment-note">입금이 확인되지 않은 건은 수거구역을 배정할 수 없습니다. 먼저 입금 확인을 처리해 주세요.</p>` : ""}
     <div class="reason-actions">
       <label>보완·반려 사유<input id="action-reason" type="text" placeholder="사유를 입력하세요" /></label>
       <button class="button outline" type="button" id="request-supplement">보완요청</button>
@@ -173,7 +186,7 @@ function renderDetail() {
     </div>
     <div class="detail-data">
       <span><b>결제수단</b>${PAYMENT_METHOD_LABEL[report.payment_method] || report.payment_method || "기타"}</span>
-      <span><b>결제상태</b><i class="badge-tag ${isPendingCash ? 'badge-cash' : 'badge-pay-ok'}">${PAYMENT_LABEL[report.payment_status] || report.payment_status}</i></span>
+      <span><b>결제상태</b><i class="badge-tag ${unpaid ? "badge-cash" : "badge-pay-ok"}">${PAYMENT_LABEL[report.payment_status] || report.payment_status}</i></span>
       <span><b>총 수수료</b>${won.format(report.total_fee)}원</span>
       <span><b>위치 좌표</b>${location}</span>
       <span><b>접수일시</b>${new Date(report.created_at).toLocaleString("ko-KR")}</span>
@@ -189,7 +202,7 @@ function renderDetail() {
     ${actions}
     <p class="form-message" id="detail-message"></p>`;
 
-  if (isPendingCash) {
+  if (unpaid) {
     $("#confirm-payment-btn")?.addEventListener("click", () => {
       runAction(report.report_no, { action: "confirm_payment" });
     });
@@ -197,8 +210,9 @@ function renderDetail() {
 
   if (report.status === "REJECTED" || report.status === "COLLECTED") return;
 
-  $("#assign-request").addEventListener("click", () => {
-    if (isPendingCash && !confirm("⚠️ 아직 현금 수납이 확인되지 않은 건입니다.\n수납 확인 전에 수거구역을 먼저 배정하시겠습니까?")) {
+  $("#assign-request")?.addEventListener("click", () => {
+    if (isUnpaid(report)) {
+      $("#detail-message").textContent = "입금 확인 후에만 수거구역을 배정할 수 있습니다.";
       return;
     }
     runAction(report.report_no, { action: "assign", zone: $("#assign-zone").value, assignee: $("#assign-name").value });

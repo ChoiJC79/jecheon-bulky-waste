@@ -7,6 +7,7 @@ import {
   sendJson,
   ZONES
 } from "../lib/supabase.js";
+import { isAllowedPaymentMethod, paymentStatusForNewReport } from "../lib/payment.js";
 
 export default async function handler(req, res) {
   if (req.method === "GET") {
@@ -107,10 +108,10 @@ async function handlePost(req, res) {
     if (
       !address ||
       !addressDetail ||
-      !["kakaopay", "naverpay", "tosspay", "card", "transfer", "cash"].includes(paymentMethod) ||
+      !isAllowedPaymentMethod(paymentMethod) ||
       !validItems
     ) {
-      return sendJson(res, 400, { error: "주소, 상세 장소, 결제수단, 품목을 확인해 주세요." });
+      return sendJson(res, 400, { error: "주소, 상세 장소, 품목을 확인해 주세요. 납부는 계좌이체만 가능합니다." });
     }
 
     const latitude = Number.isFinite(location?.latitude) ? location.latitude : null;
@@ -119,12 +120,7 @@ async function handlePost(req, res) {
     const beforePhotoPath = beforePhoto ? await savePhoto(beforePhoto, `${reportNo}-before`) : null;
     const createdAt = new Date().toISOString();
     const totalFee = items.reduce((sum, item) => sum + item.fee * item.quantity, 0);
-    const paymentStatus =
-      paymentMethod === "cash"
-        ? "PENDING_CASH_RECEIPT"
-        : paymentMethod === "transfer"
-        ? "PENDING_TRANSFER"
-        : "COMPLETED";
+    const paymentStatus = paymentStatusForNewReport();
 
     if (isSupabaseConfigured && supabase) {
       const { error: reportError } = await supabase.from("reports").insert({

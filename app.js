@@ -178,10 +178,17 @@ function renderSelection() {
 
 function renderCart() {
   const cart = $("#cart");
-  if (!state.cart.length) { cart.innerHTML = "<p class=\"empty-cart\">아직 선택한 품목이 없습니다.</p>"; $("#total-fee").textContent = "0원"; return; }
+  const amountEl = $("#bank-transfer-amount");
+  if (!state.cart.length) {
+    cart.innerHTML = "<p class=\"empty-cart\">아직 선택한 품목이 없습니다.</p>";
+    $("#total-fee").textContent = "0원";
+    if (amountEl) amountEl.textContent = "품목 선택 후 표시";
+    return;
+  }
   const total = state.cart.reduce((sum, item) => sum + item.fee * item.quantity, 0);
   cart.innerHTML = state.cart.map((item, index) => `<div class="cart-row"><span><b>${item.name}</b><small>${item.option} · ${item.quantity}개</small></span><strong>${won.format(item.fee * item.quantity)}원</strong><button type="button" data-remove="${index}" aria-label="${item.name} 삭제">×</button></div>`).join("");
   $("#total-fee").textContent = `${won.format(total)}원`;
+  if (amountEl) amountEl.textContent = `${won.format(total)}원`;
   document.querySelectorAll("[data-remove]").forEach((button) => button.addEventListener("click", () => { state.cart.splice(Number(button.dataset.remove), 1); renderCart(); }));
 }
 
@@ -273,13 +280,22 @@ $("#before-photo-remove").addEventListener("click", () => {
   beforePhotoMessage("");
 });
 
+const DEFAULT_BANK_ACCOUNT = {
+  bankName: "(시 지정 은행 — 교체 필요)",
+  accountHolder: "제천시 (대형폐기물 수수료) — 교체 필요",
+  accountNumber: "000-00-000000",
+  placeholder: true,
+  notice: "이 계좌 정보는 시에서 실제 수납 계좌로 교체하기 위한 자리표시자입니다. 실제 개인 계좌가 아닙니다."
+};
+state.bankAccount = { ...DEFAULT_BANK_ACCOUNT };
+
 const PAYMENT_METHOD_NAMES = {
+  transfer: "계좌이체",
+  cash: "현금결제",
+  card: "카드결제",
   kakaopay: "카카오페이",
   naverpay: "네이버페이",
-  tosspay: "토스",
-  card: "카드결제",
-  transfer: "계좌이체",
-  cash: "현금결제"
+  tosspay: "토스"
 };
 const PAYMENT_STATUS_NAMES = {
   PENDING_PAYMENT: "결제대기",
@@ -287,6 +303,47 @@ const PAYMENT_STATUS_NAMES = {
   PENDING_TRANSFER: "계좌입금대기",
   COMPLETED: "결제완료"
 };
+
+function applyBankAccount(account) {
+  state.bankAccount = { ...DEFAULT_BANK_ACCOUNT, ...account };
+  const holder = $("#bank-account-holder");
+  const bankName = $("#bank-name");
+  const number = $("#bank-account-number");
+  const note = $("#bank-placeholder-note");
+  if (holder) holder.textContent = state.bankAccount.accountHolder;
+  if (bankName) bankName.textContent = state.bankAccount.bankName;
+  if (number) number.textContent = state.bankAccount.accountNumber;
+  if (note) {
+    note.textContent = state.bankAccount.notice || DEFAULT_BANK_ACCOUNT.notice;
+    note.hidden = !state.bankAccount.placeholder;
+  }
+}
+
+async function loadBankAccount() {
+  try {
+    const response = await fetch("/api/payment-account");
+    if (response.ok) {
+      applyBankAccount(await response.json());
+      return;
+    }
+  } catch { /* 정적 설정 파일로 폴백 */ }
+  try {
+    const response = await fetch("/payment-account.json");
+    if (response.ok) applyBankAccount(await response.json());
+  } catch { /* HTML 자리표시자 유지 */ }
+}
+
+function bankTransferInstructionHtml({ reportNo, amount } = {}) {
+  const account = state.bankAccount || DEFAULT_BANK_ACCOUNT;
+  const amountText = Number.isFinite(amount) ? `${won.format(amount)}원` : "";
+  return `
+    <p class="selection-label">입금 계좌</p>
+    ${account.placeholder ? `<p class="bank-placeholder-note">${escapeHtml(account.notice)}</p>` : ""}
+    <p><b>예금주</b> ${escapeHtml(account.accountHolder)} · <b>은행</b> ${escapeHtml(account.bankName)}</p>
+    <p><b>계좌번호</b> ${escapeHtml(account.accountNumber)}${amountText ? ` · <b>금액</b> ${amountText}` : ""}</p>
+    <p>${reportNo ? `입금자명에는 접수번호 <b>${escapeHtml(reportNo)}</b>를 적어 주세요.` : "입금자명에는 접수번호를 적어 주세요."} 담당자가 입금을 확인한 뒤에만 수거가 배정됩니다.</p>
+  `;
+}
 
 const LOOKUP_STATUS_LABEL = { RECEIVED: "접수 완료", ASSIGNED: "수거 예정", SUPPLEMENT_REQUESTED: "보완 요청", REJECTED: "반려", COLLECTED: "수거 완료" };
 async function lookupReport() {
@@ -300,7 +357,9 @@ async function lookupReport() {
     if (!response.ok) { result.innerHTML = `<p class="lookup-message">${data.error || "신고 내용을 찾을 수 없습니다."}</p>`; return; }
     const report = data.report;
     const itemsHtml = report.items.map((item) => `<li><span>${item.name} · ${item.option_name}</span><b>${item.quantity}개</b></li>`).join("");
-    const paymentMethodText = PAYMENT_METHOD_NAMES[report.payment_method] || report.payment_method || "기타";
+    const paymentMethodText = PAYMENT_METHOD_NAMES[report.payment_method] || report.payment_method || "계좌이체";
+    const isUnpaid = report.payment_status !== "COMPLETED";
+    const isPendingTransfer = report.payment_status === "PENDING_TRANSFER";
     const isPendingCash = report.payment_status === "PENDING_CASH_RECEIPT";
     const paymentStatusText = PAYMENT_STATUS_NAMES[report.payment_status] || report.payment_status;
     const paymentBadgeClass = report.payment_status === "COMPLETED" ? "badge-pay-ok" : "badge-cash";
@@ -314,7 +373,9 @@ async function lookupReport() {
         <p class="field-help">${report.address}</p>
         <div class="lookup-payment-info">
           <div><span><b>결제 방법:</b> ${paymentMethodText}</span><span class="badge-tag ${paymentBadgeClass}">${paymentStatusText}</span></div>
-          ${isPendingCash ? '<p class="lookup-cash-notice">💵 관할 주민센터(행정복지센터) 또는 지정 수납처에 현금을 납부해 주세요. 담당자 수납 확인 후 수거가 진행됩니다.</p>' : ''}
+          ${isPendingTransfer ? `<div class="lookup-cash-notice">${bankTransferInstructionHtml({ reportNo: report.report_no, amount: report.total_fee })}</div>` : ""}
+          ${isPendingCash ? '<p class="lookup-cash-notice">관할 주민센터(행정복지센터) 또는 지정 수납처에 현금을 납부해 주세요. 담당자 수납 확인 후 수거가 진행됩니다.</p>' : ''}
+          ${isUnpaid && !isPendingTransfer && !isPendingCash ? '<p class="lookup-cash-notice">납부가 확인되지 않았습니다. 담당자 확인 후 수거가 진행됩니다.</p>' : ""}
         </div>
         <ul class="detail-items">${itemsHtml}</ul>
         <div class="lookup-photos">${photosHtml}</div>
@@ -326,28 +387,16 @@ async function lookupReport() {
 $("#lookup-button").addEventListener("click", lookupReport);
 $("#lookup-input").addEventListener("keydown", (event) => { if (event.key === "Enter") lookupReport(); });
 
-const paymentGuidance = {
-  kakaopay: "카카오페이 결제 승인 후 신고가 접수됩니다. 현장 확인으로 추가요금이 발생하면 별도 안내 후 추가 결제가 진행됩니다.",
-  naverpay: "네이버페이 결제 승인 후 신고가 접수됩니다. 현장 확인으로 추가요금이 발생하면 별도 안내 후 추가 결제가 진행됩니다.",
-  tosspay: "토스 결제 승인 후 신고가 접수됩니다. 현장 확인으로 추가요금이 발생하면 별도 안내 후 추가 결제가 진행됩니다.",
-  card: "카드결제 승인 후 신고가 접수됩니다. 현장 확인으로 추가요금이 발생하면 별도 안내 후 추가 결제가 진행됩니다.",
-  transfer: "계좌이체는 입금이 확인된 뒤 신고가 정식 접수됩니다. 가상계좌를 선택한 경우 안내된 금액과 기한을 확인해 주세요.",
-  cash: "현금결제는 지정 수납처 또는 안내된 수납 방법으로 납부한 뒤, 수납 담당자가 확인해야 신고가 접수됩니다."
-};
-function updateSubmitButtonText(paymentMethod) {
-  const isCash = paymentMethod === "cash";
-  const btnText = isCash ? "현금결제로 신고 접수하기" : "신고 접수 및 결제하기";
-  if ($("#step3-submit-btn")) $("#step3-submit-btn").textContent = btnText;
-  if (state.currentStep === 3 && $("#checkout-step-btn")) $("#checkout-step-btn").textContent = btnText;
+const TRANSFER_SUBMIT_LABEL = "계좌이체로 신고 접수하기";
+function updateSubmitButtonText() {
+  if ($("#step3-submit-btn")) $("#step3-submit-btn").textContent = TRANSFER_SUBMIT_LABEL;
+  if (state.currentStep === 3 && $("#checkout-step-btn")) $("#checkout-step-btn").textContent = TRANSFER_SUBMIT_LABEL;
 }
 function renderPaymentGuidance() {
-  const selected = document.querySelector("input[name=payment]:checked");
-  if (selected) {
-    $("#payment-notice").textContent = paymentGuidance[selected.value];
-    updateSubmitButtonText(selected.value);
-  }
+  const notice = $("#payment-notice");
+  if (notice) notice.textContent = "계좌이체는 입금이 확인된 뒤 수거가 배정됩니다. 안내된 금액과 예금주를 확인해 주세요.";
+  updateSubmitButtonText();
 }
-document.querySelectorAll("input[name=payment]").forEach((input) => input.addEventListener("change", renderPaymentGuidance));
 
 function goToStep(targetStep) {
   const message = $("#form-message");
@@ -375,12 +424,9 @@ function goToStep(targetStep) {
 
   const checkoutBtn = $("#checkout-step-btn");
   if (checkoutBtn) {
-    if (targetStep === 1) checkoutBtn.textContent = '다음 단계 "결제" ›';
-    else if (targetStep === 2) checkoutBtn.textContent = '다음 단계 "결제" ›';
-    else {
-      const selected = document.querySelector("input[name=payment]:checked");
-      updateSubmitButtonText(selected?.value);
-    }
+    if (targetStep === 1) checkoutBtn.textContent = '다음 단계 "납부" ›';
+    else if (targetStep === 2) checkoutBtn.textContent = '다음 단계 "납부" ›';
+    else updateSubmitButtonText();
   }
 
   if (targetStep === 2 && reportMap) {
@@ -414,7 +460,7 @@ $("#report-form").addEventListener("submit", async (event) => {
   const message = $("#form-message");
   if (!state.cart.length) { message.textContent = "수거할 품목을 한 개 이상 추가해 주세요."; return; }
   if (!$("#address").value.trim() || !$("#address-detail").value.trim()) { message.textContent = "배출 주소와 상세 배출 장소를 모두 입력해 주세요."; return; }
-  const payment = document.querySelector("input[name=payment]:checked");
+  const payment = document.querySelector("input[name=payment]");
   const submitButton = event.submitter || $("#checkout-step-btn");
   if (submitButton) submitButton.disabled = true;
   message.textContent = "신고 내용을 저장하고 있습니다.";
@@ -425,7 +471,7 @@ $("#report-form").addEventListener("submit", async (event) => {
       body: JSON.stringify({
         address: $("#address").value.trim(),
         addressDetail: $("#address-detail").value.trim(),
-        paymentMethod: payment.value,
+        paymentMethod: payment?.value || "transfer",
         location: state.location,
         items: state.cart,
         beforePhoto: state.beforePhoto
@@ -433,11 +479,7 @@ $("#report-form").addEventListener("submit", async (event) => {
     });
     const result = await response.json();
     if (!response.ok) throw new Error(result.error);
-    const paymentName = PAYMENT_METHOD_NAMES[payment.value] || payment.value;
-    const isCash = payment.value === "cash";
-    message.textContent = isCash
-      ? `${result.reportNo}번으로 접수되었습니다. 지정 수납처(주민센터 등) 납부 확인 후 수거 배정이 진행됩니다. 이 접수번호를 저장해두면 아래 "내 신고 확인하기"에서 수거 완료 사진을 볼 수 있어요.`
-      : `${result.reportNo}번으로 접수되었습니다. ${paymentName} 승인 확인 후 수거 배정이 진행됩니다. 이 접수번호를 저장해두면 아래 "내 신고 확인하기"에서 수거 완료 사진을 볼 수 있어요.`;
+    message.textContent = `${result.reportNo}번으로 접수되었습니다. 안내된 계좌로 입금해 주세요. 담당자가 입금을 확인한 뒤 수거 배정이 진행됩니다. 이 접수번호를 저장해두면 아래 "내 신고 확인하기"에서 수거 완료 사진을 볼 수 있어요.`;
 
     // Show receipt card
     $("#receipt-no").textContent = result.reportNo;
@@ -445,21 +487,17 @@ $("#report-form").addEventListener("submit", async (event) => {
     $("#receipt-summary").innerHTML = `
       <p style="margin:4px 0 8px;color:var(--muted)"><b>배출 장소:</b> ${escapeHtml($("#address").value)} ${escapeHtml($("#address-detail").value)}</p>
       <ul>${itemsHtml}</ul>
-      <p style="text-align:right;margin:8px 0 0;font-weight:800;font-size:1rem;color:var(--accent)">총 수수료: ${won.format(result.totalFee)}원 (${paymentName})</p>
+      <p style="text-align:right;margin:8px 0 0;font-weight:800;font-size:1rem;color:var(--accent)">총 수수료: ${won.format(result.totalFee)}원 (계좌이체)</p>
       <div style="margin-top:10px;padding:8px 12px;background:var(--bg);border-radius:var(--radius-sm);display:flex;justify-content:space-between;align-items:center;font-size:.84rem;">
         <span><b>결제 상태</b></span>
-        <span class="badge-tag ${isCash ? 'badge-cash' : 'badge-pay-ok'}">${isCash ? '💵 현금 수납 대기' : '결제 완료'}</span>
+        <span class="badge-tag badge-cash">계좌입금대기</span>
       </div>
     `;
 
-    const cashGuideEl = $("#receipt-cash-guide");
-    if (cashGuideEl) {
-      if (isCash) {
-        cashGuideEl.hidden = false;
-        cashGuideEl.innerHTML = `<strong>💵 현금 납부 안내</strong><p>신고가 정상 접수되었습니다. 위 <b>접수번호</b>를 지참하여 관할 <b>행정복지센터(주민센터)에 방문 납부</b>해 주세요. 담당자가 수납 확인을 완료하면 수거 배정이 진행됩니다.</p>`;
-      } else {
-        cashGuideEl.hidden = true;
-      }
+    const transferGuideEl = $("#receipt-transfer-guide");
+    if (transferGuideEl) {
+      transferGuideEl.hidden = false;
+      transferGuideEl.innerHTML = `<strong>계좌이체 안내</strong>${bankTransferInstructionHtml({ reportNo: result.reportNo, amount: result.totalFee })}`;
     }
 
     $("#receipt-card").hidden = false;
@@ -472,6 +510,17 @@ $("#report-form").addEventListener("submit", async (event) => {
   }
 });
 
+$("#copy-account-number")?.addEventListener("click", async () => {
+  const number = $("#bank-account-number")?.textContent?.trim();
+  if (!number) return;
+  try {
+    await navigator.clipboard.writeText(number);
+    $("#copy-account-number").textContent = "복사 완료! ✓";
+    setTimeout(() => { $("#copy-account-number").textContent = "계좌번호 복사"; }, 2000);
+  } catch {
+    $("#copy-account-number").textContent = "복사 실패";
+  }
+});
 $("#copy-receipt-no")?.addEventListener("click", async () => {
   const no = $("#receipt-no").textContent;
   try {
@@ -502,5 +551,5 @@ $("#receipt-new-btn")?.addEventListener("click", () => {
   goToStep(1);
 });
 
-renderCategories(); renderItems(); renderCart(); renderPaymentGuidance();
+renderCategories(); renderItems(); renderCart(); renderPaymentGuidance(); loadBankAccount();
 

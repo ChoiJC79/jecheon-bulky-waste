@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
 
 test("신고 화면은 품목, 위치, 결제 입력 요소를 포함한다", async () => {
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
@@ -10,7 +11,7 @@ test("신고 화면은 품목, 위치, 결제 입력 요소를 포함한다", as
   assert.match(html, /name="payment"/);
 });
 
-test("품목 카탈로그는 분류와 카드·계좌이체·현금 결제 안내를 지원한다", async () => {
+test("품목 카탈로그는 분류와 계좌이체 납부 안내를 지원한다", async () => {
   const app = await readFile(new URL("../app.js", import.meta.url), "utf8");
   assert.match(app, /거실·침실 가구/);
   assert.match(app, /가전제품/);
@@ -19,16 +20,24 @@ test("품목 카탈로그는 분류와 카드·계좌이체·현금 결제 안�
   assert.match(app, /1599-0903/);
   assert.match(app, /\$\{name\} 무상수거 예약하기/);
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
-  assert.match(html, /카드결제/);
   assert.match(html, /계좌이체/);
-  assert.match(html, /현금결제/);
-  assert.match(html, /카카오페이/);
-  assert.match(html, /네이버페이/);
-  assert.match(html, /value="tosspay"/);
+  assert.match(html, /예금주/);
+  assert.match(html, /계좌번호/);
+  assert.match(html, /value="transfer"/);
+  assert.doesNotMatch(html, /value="kakaopay"/);
+  assert.doesNotMatch(html, /value="naverpay"/);
+  assert.doesNotMatch(html, /value="tosspay"/);
+  assert.doesNotMatch(html, /value="card"/);
+  assert.doesNotMatch(html, /value="cash"/);
+  assert.doesNotMatch(html, /카드결제/);
+  assert.doesNotMatch(html, /카카오페이/);
+  assert.doesNotMatch(html, /네이버페이/);
+  assert.doesNotMatch(html, /현금결제/);
   assert.match(app, /fetch\("\/api\/reports"/);
-  assert.match(app, /계좌이체는 입금이 확인된 뒤 신고가 정식 접수됩니다/);
+  assert.match(app, /계좌이체는 입금이 확인된 뒤 수거가 배정됩니다/);
   assert.match(html, /현장 확인과 추가요금 안내/);
   assert.match(html, /id="disposal-guide"/);
+  assert.match(html, /시에서 실제 수납 계좌로 교체하기 위한 자리표시자/);
 });
 
 test("내부 업무 화면은 접수·현장·데이터 검증 역할을 제공한다", async () => {
@@ -63,6 +72,15 @@ test("현장 처리 화면은 실제 배정 건을 불러와 사진과 함께 �
   assert.match(app, /COLLECTED: "수거완료"/);
 });
 
+test("내부 업무 화면은 입금 확인 후에만 수거구역을 배정한다고 안내한다", async () => {
+  const html = await readFile(new URL("../staff.html", import.meta.url), "utf8");
+  const app = await readFile(new URL("../staff.js", import.meta.url), "utf8");
+  assert.match(html, /PENDING_TRANSFER/);
+  assert.match(app, /입금 확인 \(결제완료 처리\)/);
+  assert.match(app, /입금이 확인되지 않은 건은 수거구역을 배정할 수 없습니다/);
+  assert.match(app, /confirm_payment/);
+});
+
 test("시민 화면은 3단계 스텝 위저드와 자주 찾는 품목, 검색 동의어, 접수증 카드를 지원한다", async () => {
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
   const app = await readFile(new URL("../app.js", import.meta.url), "utf8");
@@ -90,5 +108,12 @@ test("현장 업무 화면은 지도 표시, 실제 거리 계산, 길찾기, �
   assert.match(app, /updateFieldTaskMap/);
   assert.match(app, /action: "uncollect"/);
   assert.match(app, /action: "field_change"/);
+});
+
+test("시민·접수·태블릿 스크립트는 문법 오류가 없다", () => {
+  for (const file of ["app.js", "staff.js", "tablet.js"]) {
+    const result = spawnSync(process.execPath, ["--check", file], { encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr || `${file} 문법 오류`);
+  }
 });
 
