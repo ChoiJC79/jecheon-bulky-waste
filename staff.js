@@ -65,6 +65,8 @@ function paymentBadgeHtml(report) {
   const label = PAYMENT_LABEL[report.payment_status] || "입금대기";
   return `<span class="badge-tag badge-cash">${label}</span>`;
 }
+
+function renderMetrics(all) {
   const todayStr = new Date().toISOString().slice(0, 10);
   const today = all.filter((report) => report.created_at.slice(0, 10) === todayStr).length;
   const unassigned = all.filter((report) => report.status === "RECEIVED").length;
