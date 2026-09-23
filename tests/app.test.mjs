@@ -12,12 +12,14 @@ test("신고 화면은 품목, 위치, 결제 입력 요소를 포함한다", as
 
 test("품목 카탈로그는 분류와 카드·계좌이체·현금 결제 안내를 지원한다", async () => {
   const app = await readFile(new URL("../app.js", import.meta.url), "utf8");
-  assert.match(app, /거실·침실 가구/);
-  assert.match(app, /가전제품/);
-  assert.match(app, /재활용·분리배출/);
-  assert.match(app, /폐가전 무상방문수거/);
-  assert.match(app, /1599-0903/);
-  assert.match(app, /\$\{name\} 무상수거 예약하기/);
+  const catalog = await readFile(new URL("../office-catalog.js", import.meta.url), "utf8");
+  assert.match(app, /CITIZEN_ITEM_CATALOG/);
+  assert.match(catalog, /거실·침실 가구/);
+  assert.match(catalog, /가전제품/);
+  assert.match(catalog, /재활용·분리배출/);
+  assert.match(catalog, /폐가전 무상방문수거/);
+  assert.match(catalog, /1599-0903/);
+  assert.match(catalog, /\$\{name\} 무상수거 예약하기/);
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
   assert.match(html, /카드결제/);
   assert.match(html, /계좌이체/);
@@ -66,6 +68,10 @@ test("사무실 전화 접수는 입력·자동이체 확인·태블릿 전송 �
   assert.match(html, /id="fleet-board"/);
   assert.match(html, /id="fleet-device-grid"/);
   assert.match(html, /href="tablet.html"/);
+  assert.match(html, /id="intake-add-custom"/);
+  assert.match(html, /목록에 없으면 수기 입력/);
+  assert.match(html, /별표 1/);
+  assert.match(intake, /buildCustomCartItem/);
   assert.match(intake, /channel: "PHONE"/);
   assert.match(intake, /action: "confirm_transfer"/);
   assert.match(intake, /action: "assign"/);
@@ -109,7 +115,8 @@ test("시민 화면은 3단계 스텝 위저드와 자주 찾는 품목, 검색 
   assert.match(html, /id="receipt-no"/);
   assert.match(app, /SYNONYMS/);
   assert.match(app, /goToStep/);
-  assert.match(app, /쇼파/);
+  const catalog = await readFile(new URL("../office-catalog.js", import.meta.url), "utf8");
+  assert.match(catalog, /쇼파/);
 });
 
 test("현장 업무 화면은 지도 표시, 실제 거리 계산, 길찾기, 미수거 및 변경요청 모달을 지원한다", async () => {

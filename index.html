@@ -60,7 +60,7 @@
             <span class="icon" aria-hidden="true">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9" /><line x1="12" y1="11" x2="12" y2="16.2" /><circle cx="12" cy="7.6" r=".6" fill="currentColor" stroke="none" /></svg>
             </span>
-            <p><strong>시범 화면이에요.</strong> 품목과 수수료는 예시이며, 운영 시 제천시 확정 수수료표를 적용해요.</p>
+            <p><strong>시범 화면이에요.</strong> 품목과 수수료는 제천시 폐기물관리 조례 별표 1 기준이에요. 폐가전은 무상방문수거로 안내해요.</p>
           </div>
         </section>
 
@@ -82,14 +82,14 @@
               <span class="icon" aria-hidden="true">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7" /><line x1="21" y1="21" x2="16.6" y2="16.6" /></svg>
               </span>
-              <input id="item-search" type="search" placeholder="예: 소파, 침대, 전자레인지" autocomplete="off" />
+              <input id="item-search" type="search" placeholder="예: 쇼파, 장농, 책상" autocomplete="off" />
             </label>
 
             <div class="quick-chips" aria-label="자주 찾는 품목">
               <span class="quick-chip-label">자주 찾는 품목</span>
-              <button type="button" class="quick-chip" data-quick="소파">🛋 소파</button>
-              <button type="button" class="quick-chip" data-quick="침대">🛏 침대</button>
-              <button type="button" class="quick-chip" data-quick="매트리스">🪑 매트리스</button>
+              <button type="button" class="quick-chip" data-quick="쇼파">🛋 쇼파</button>
+              <button type="button" class="quick-chip" data-quick="장농">🚪 장농</button>
+              <button type="button" class="quick-chip" data-quick="침대 매트리스">🛏 매트리스</button>
               <button type="button" class="quick-chip" data-quick="책상">🖥 책상</button>
               <button type="button" class="quick-chip" data-quick="서랍장">🗄 서랍장</button>
               <button type="button" class="quick-chip" data-quick="자전거">🚲 자전거</button>
@@ -260,6 +260,6 @@
     </div>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     <script src="photo.js"></script>
-    <script src="app.js"></script>
+    <script type="module" src="app.js"></script>
   </body>
 </html>

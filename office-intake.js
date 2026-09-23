@@ -1,4 +1,11 @@
-import { OFFICE_ITEM_CATALOG, OFFICE_ADDRESS_PRESETS } from "./office-catalog.js";
+import {
+  OFFICE_ITEM_CATALOG,
+  OFFICE_ADDRESS_PRESETS,
+  OFFICE_QUICK_ITEMS,
+  buildCustomCartItem,
+  matchExcludedRoute,
+  searchPayableItems
+} from "./office-catalog.js";
 
 const capturePhoto = (...args) => globalThis.capturePhoto(...args);
 const won = new Intl.NumberFormat("ko-KR");
@@ -82,8 +89,9 @@ function selectedCategory() {
 }
 
 function selectedItem() {
-  const category = selectedCategory();
-  return category.items.find((item) => item.name === $("#intake-item")?.value) || category.items[0];
+  const name = $("#intake-item")?.value;
+  const items = visibleItems();
+  return items.find((item) => item.name === name) || items[0] || null;
 }
 
 function renderCategoryOptions() {
@@ -93,18 +101,36 @@ function renderCategoryOptions() {
   renderItemOptions();
 }
 
+function visibleItems() {
+  const query = $("#intake-item-search")?.value.trim() || "";
+  if (!query) return selectedCategory().items;
+  const matches = searchPayableItems(query);
+  return matches.length ? matches : [];
+}
+
 function renderItemOptions() {
   const select = $("#intake-item");
   if (!select) return;
-  const category = selectedCategory();
-  select.innerHTML = category.items.map((item) => `<option value="${escapeHtml(item.name)}">${escapeHtml(item.name)}</option>`).join("");
+  const items = visibleItems();
+  if (!items.length) {
+    select.innerHTML = `<option value="">목록에 없음 · 수기 입력을 사용하세요</option>`;
+    renderOptionOptions();
+    renderExcludedHint();
+    return;
+  }
+  select.innerHTML = items.map((item) => `<option value="${escapeHtml(item.name)}">${escapeHtml(item.name)}</option>`).join("");
   renderOptionOptions();
+  renderExcludedHint();
 }
 
 function renderOptionOptions() {
   const select = $("#intake-option");
   if (!select) return;
   const item = selectedItem();
+  if (!item?.options?.length) {
+    select.innerHTML = `<option value="">규격 없음</option>`;
+    return;
+  }
   select.innerHTML = item.options.map(([label, fee], index) => `<option value="${index}">${escapeHtml(label)} · ${won.format(fee)}원</option>`).join("");
 }
 
@@ -116,7 +142,7 @@ function renderCart() {
     cart.innerHTML = `<p class="intake-empty">전화로 들은 품목을 추가해 주세요.</p>`;
   } else {
     cart.innerHTML = state.cart.map((item, index) => `<li>
-      <span>${escapeHtml(item.name)} · ${escapeHtml(item.option)} × ${item.quantity}</span>
+      <span>${escapeHtml(item.name)} · ${escapeHtml(item.option)} × ${item.quantity}${item.custom ? ' <i class="badge-phone">수기</i>' : ""}</span>
       <b>${won.format(item.fee * item.quantity)}원</b>
       <button type="button" class="text-button" data-remove-item="${index}">삭제</button>
     </li>`).join("");
@@ -128,18 +154,54 @@ function renderCart() {
   if (total) total.textContent = `${won.format(feeTotal())}원`;
 }
 
-function addCartItem({ name, option, fee, quantity = 1 } = {}) {
-  const item = name ? { name, option, fee, quantity } : null;
+function addCartItem({ name, option, fee, quantity = 1, custom = false } = {}) {
+  const item = name ? { name, option, fee, quantity, custom } : null;
   if (!item) {
     const selected = selectedItem();
+    if (!selected?.options?.length) return message("#intake-message", "조례 목록에 없으면 아래 수기 입력으로 추가해 주세요.");
     const optionIndex = Number($("#intake-option").value);
     const [optionName, optionFee] = selected.options[optionIndex] || selected.options[0];
     const qty = Math.max(1, Number($("#intake-qty").value) || 1);
-    state.cart.push({ name: selected.name, option: optionName, fee: optionFee, quantity: qty });
+    state.cart.push({ name: selected.name, option: optionName, fee: optionFee, quantity: qty, custom: false });
   } else {
     state.cart.push(item);
   }
+  message("#intake-message", "");
   renderCart();
+}
+
+function addCustomCartItem() {
+  const result = buildCustomCartItem({
+    name: $("#intake-custom-name")?.value,
+    option: $("#intake-custom-option")?.value,
+    fee: $("#intake-custom-fee")?.value,
+    quantity: $("#intake-custom-qty")?.value
+  });
+  if (result.error) return message("#intake-message", result.error);
+  addCartItem(result.item);
+  if ($("#intake-custom-name")) $("#intake-custom-name").value = "";
+  if ($("#intake-custom-option")) $("#intake-custom-option").value = "";
+  if ($("#intake-custom-fee")) $("#intake-custom-fee").value = "";
+  if ($("#intake-custom-qty")) $("#intake-custom-qty").value = "1";
+  message("#intake-message", `${result.item.name}을 수기로 추가했습니다. 조례 목록에 없어도 접수됩니다.`);
+}
+
+function renderExcludedHint() {
+  const box = $("#intake-excluded-hint");
+  if (!box) return;
+  const query = $("#intake-item-search")?.value.trim() || $("#intake-custom-name")?.value.trim() || "";
+  const hit = matchExcludedRoute(query);
+  if (!hit) {
+    box.hidden = true;
+    box.innerHTML = "";
+    return;
+  }
+  const fees = (hit.ordinanceFees || []).map(([label, fee]) => `${label} ${won.format(fee)}원`).join(" · ");
+  box.hidden = false;
+  box.innerHTML = `<strong>${escapeHtml(hit.name)}은 대형폐기물 목록에 넣지 않습니다.</strong>
+    <p>${escapeHtml(hit.guide?.title || "다른 배출 경로를 안내하세요.")}</p>
+    <p>${escapeHtml((hit.guide?.steps || []).join(" "))}</p>
+    ${fees ? `<p>무상수거가 안 될 때만 수기 입력하세요. 조례 참고 수수료: ${escapeHtml(fees)}</p>` : ""}`;
 }
 
 function renderAddressPresets() {
@@ -158,12 +220,7 @@ function renderAddressPresets() {
 function renderQuickChips() {
   const box = $("#intake-quick-chips");
   if (!box) return;
-  const chips = [
-    { name: "소파", option: "2인용", fee: 5000, quantity: 1 },
-    { name: "장롱", option: "1쪽", fee: 5000, quantity: 1 },
-    { name: "책상", option: "1m 미만", fee: 3000, quantity: 1 },
-    { name: "매트리스", option: "1인용", fee: 5000, quantity: 1 }
-  ];
+  const chips = OFFICE_QUICK_ITEMS;
   box.innerHTML = chips.map((chip, index) => `<button type="button" class="quick-chip" data-quick="${index}">${escapeHtml(chip.name)} ${escapeHtml(chip.option)}</button>`).join("");
   box.querySelectorAll("[data-quick]").forEach((button) => button.addEventListener("click", () => addCartItem(chips[Number(button.dataset.quick)])));
 }
@@ -505,9 +562,15 @@ export function setupOfficeIntake(options = {}) {
   setupIntakeMap();
   loadAssignees();
 
-  $("#intake-category")?.addEventListener("change", renderItemOptions);
+  $("#intake-category")?.addEventListener("change", () => {
+    if ($("#intake-item-search")) $("#intake-item-search").value = "";
+    renderItemOptions();
+  });
   $("#intake-item")?.addEventListener("change", renderOptionOptions);
+  $("#intake-item-search")?.addEventListener("input", renderItemOptions);
   $("#intake-add-item")?.addEventListener("click", () => addCartItem());
+  $("#intake-add-custom")?.addEventListener("click", addCustomCartItem);
+  $("#intake-custom-name")?.addEventListener("input", renderExcludedHint);
   $("#intake-form")?.addEventListener("submit", submitIntake);
   $("#intake-photo-btn")?.addEventListener("click", () => $("#intake-photo-input").click());
   $("#intake-photo-input")?.addEventListener("change", async (event) => {

@@ -85,7 +85,7 @@
         <section class="work-card office-step-panel" id="office-step-1">
           <div class="section-head">
             <h2>전화로 받은 대형폐기물 신고</h2>
-            <p>통화 중 들은 신고자, 품목, 배출 위치, 사진을 입력합니다. 수수료는 시범 품목표로 계산되며 결제수단은 자동이체입니다.</p>
+            <p>통화 중 들은 신고자, 품목, 배출 위치, 사진을 입력합니다. 수수료는 제천시 폐기물관리 조례 별표 1 기준이며 결제수단은 자동이체입니다. 목록에 없는 품목은 수기 입력합니다.</p>
           </div>
           <form id="intake-form" novalidate>
             <div class="intake-grid">
@@ -98,6 +98,13 @@
             </div>
             <p class="selection-label">자주 듣는 품목</p>
             <div class="quick-chips" id="intake-quick-chips"></div>
+            <label class="search-box intake-search" for="intake-item-search">
+              <span class="icon" aria-hidden="true">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7" /><line x1="21" y1="21" x2="16.6" y2="16.6" /></svg>
+              </span>
+              <input id="intake-item-search" type="search" placeholder="조례 품목 검색 예: 쇼파, 장롱, 냉장고" autocomplete="off" />
+            </label>
+            <aside class="intake-pay-note" id="intake-excluded-hint" hidden></aside>
             <div class="intake-item-row">
               <label>분류<select id="intake-category"></select></label>
               <label>품목<select id="intake-item"></select></label>
@@ -105,6 +112,17 @@
               <label>수량<input id="intake-qty" type="number" min="1" value="1" /></label>
               <button class="button secondary" type="button" id="intake-add-item">품목 추가</button>
             </div>
+            <details class="intake-custom" id="intake-custom-box" open>
+              <summary>목록에 없으면 수기 입력</summary>
+              <p>조례 품목에 없거나 규격이 다른 가구는 품목명·규격·수량·수수료를 직접 적어 추가합니다. 마스터 목록에 없어도 접수됩니다.</p>
+              <div class="intake-item-row">
+                <label>수기 품목명<input id="intake-custom-name" type="text" placeholder="예: 접이식 책상, 파손 냉장고" /></label>
+                <label>규격<input id="intake-custom-option" type="text" placeholder="예: 유사 일반책상, 분해됨" /></label>
+                <label>수량<input id="intake-custom-qty" type="number" min="1" value="1" /></label>
+                <label>수수료(원)<input id="intake-custom-fee" type="number" min="0" step="100" placeholder="예: 5000" /></label>
+                <button class="button outline" type="button" id="intake-add-custom">수기 품목 추가</button>
+              </div>
+            </details>
             <ul class="intake-cart" id="intake-cart"></ul>
             <p class="intake-fee-line">예상 수수료 <strong id="intake-fee-total">0원</strong></p>
             <div class="intake-grid">
