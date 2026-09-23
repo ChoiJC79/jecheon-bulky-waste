@@ -3,11 +3,14 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="theme-color" content="#192a24" />
-    <meta name="description" content="제천시 대형폐기물 현장 수거 전용 태블릿 시스템" />
+    <meta name="description" content="제천시 대형폐기물 현장 수거 전용 안드로이드 태블릿" />
     <title>제천시 대형폐기물 현장 수거 태블릿</title>
+    <link rel="manifest" href="tablet.webmanifest" />
+    <link rel="icon" href="tablet-icon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
     <link rel="stylesheet" href="tablet.css" />
   </head>
@@ -17,9 +20,9 @@
       <div class="tablet-brand">
         <span class="brand-badge">제천시 현장</span>
         <span class="brand-title">대형폐기물 수거 태블릿</span>
-        <button type="button" class="tablet-assignee-pill" id="btn-device-setting" aria-label="기기 담당자 변경">
+        <button type="button" class="tablet-assignee-pill" id="btn-device-setting" aria-label="태블릿 기기 변경">
           <span id="assignee-icon">🚜</span>
-          <span id="assignee-name-display">담당자 설정 중…</span>
+          <span id="assignee-name-display">기기 설정 중…</span>
           <span class="change-hint">변경</span>
         </button>
       </div>
@@ -70,8 +73,8 @@
         <!-- 1) 배정 건이 없을 때 빈 화면 -->
         <div class="stage-empty" id="stage-empty-view" hidden>
           <div class="empty-icon">🎉</div>
-          <h3>배정된 수거 작업을 모두 완료했거나 작업이 없습니다.</h3>
-          <p>새로 배정된 건이 있는지 [새로고침]을 누르거나 좌측에서 '완료' 탭을 확인하세요.</p>
+          <h3>배정된 수거 작업을 모두 완료했거나 이 태블릿으로 보낸 건이 없습니다.</h3>
+          <p>사무실에서 이 기기(1호차·2호차·예비)로 보내면 바로 목록에 나타납니다. 전체 배정 모드는 없습니다.</p>
         </div>
 
         <!-- 2) 활성 작업 화면 -->
@@ -100,8 +103,8 @@
             <!-- 좌: 현장 지도 -->
             <div class="stage-map-card">
               <div class="map-card-head">
-                <h4>신고 위치 & 현재 내 위치</h4>
-                <span class="map-dist-tag" id="stage-dist-tag">위치 확인 중…</span>
+                <h4>신고 위치</h4>
+                <span class="map-dist-tag" id="stage-dist-tag">작업 건을 열면 현재 위치를 확인합니다</span>
               </div>
               <div id="tablet-map" class="tablet-map-canvas" aria-label="수거 위치 및 내 위치 지도"></div>
             </div>
@@ -154,38 +157,34 @@
     <dialog class="tablet-modal" id="modal-device-config">
       <div class="modal-inner">
         <h3 class="modal-title">
-          <span>🚜 태블릿 기기 배정 설정</span>
+          <span>🚜 이 안드로이드 태블릿 지정</span>
           <button type="button" class="modal-close-btn" id="btn-close-device-modal">×</button>
         </h3>
         <p style="font-size:14px;color:var(--tb-muted);margin:0;">
-          이 태블릿을 운용할 수거 차량 또는 담당 기사님을 선택해 주세요.<br />
-          설정된 정보는 기기에 자동 저장되어 켜자마자 전용 작업 목록이 열립니다.
+          현장 함대는 1호차, 2호차, 예비 3대입니다. 이 기기를 하나에만 묶습니다. 전체 배정(__ALL__)은 사용하지 않습니다.<br />
+          홈 화면에 추가하면 거치대에서 앱처럼 열 수 있습니다. 시범 PIN: 1호차 1111 · 2호차 2222 · 예비 0000
         </p>
         <div class="modal-chip-grid" id="assignee-preset-grid">
           <label class="modal-chip-radio">
-            <input type="radio" name="device-assignee-opt" value="김수거 (1호차·청전의림)" checked />
-            <span>🚜 1호차 김수거<br /><small style="font-size:12px;font-weight:normal;">청전·의림 구역</small></span>
+            <input type="radio" name="device-assignee-opt" value="tablet-1" checked />
+            <span>🚜 1호차<br /><small style="font-size:12px;font-weight:normal;">청전·의림 · PIN 1111</small></span>
           </label>
           <label class="modal-chip-radio">
-            <input type="radio" name="device-assignee-opt" value="이청소 (2호차·중앙교동)" />
-            <span>🚛 2호차 이청소<br /><small style="font-size:12px;font-weight:normal;">중앙·교동 구역</small></span>
+            <input type="radio" name="device-assignee-opt" value="tablet-2" />
+            <span>🚛 2호차<br /><small style="font-size:12px;font-weight:normal;">중앙·교동 · PIN 2222</small></span>
           </label>
           <label class="modal-chip-radio">
-            <input type="radio" name="device-assignee-opt" value="박자원 (3호차·하소영천)" />
-            <span>🚚 3호차 박자원<br /><small style="font-size:12px;font-weight:normal;">하소·영천 구역</small></span>
-          </label>
-          <label class="modal-chip-radio">
-            <input type="radio" name="device-assignee-opt" value="__ALL__" />
-            <span>🌐 전체 배정 건<br /><small style="font-size:12px;font-weight:normal;">공용 / 총괄 모드</small></span>
+            <input type="radio" name="device-assignee-opt" value="tablet-spare" />
+            <span>🛠️ 예비<br /><small style="font-size:12px;font-weight:normal;">장애 시 경로 인수 · PIN 0000</small></span>
           </label>
         </div>
         <label style="font-size:14px;font-weight:700;display:flex;flex-direction:column;gap:6px;">
-          또는 담당자명 직접 입력
-          <input type="text" id="custom-assignee-input" placeholder="예: 최기사 (청전)" class="modal-textarea" style="height:44px;" />
+          기기 PIN
+          <input type="password" id="device-pin-input" inputmode="numeric" maxlength="4" placeholder="4자리 PIN" class="modal-textarea" style="height:44px;" autocomplete="off" />
         </label>
         <div class="modal-actions">
           <button type="button" class="btn-modal-cancel" id="btn-cancel-device-modal">닫기</button>
-          <button type="button" class="btn-modal-submit" id="btn-save-device-modal">이 태블릿에 저장 및 적용</button>
+          <button type="button" class="btn-modal-submit" id="btn-save-device-modal">이 태블릿에 저장</button>
         </div>
       </div>
     </dialog>
@@ -299,6 +298,6 @@
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     <script src="photo.js"></script>
-    <script src="tablet.js"></script>
+    <script type="module" src="tablet.js"></script>
   </body>
 </html>

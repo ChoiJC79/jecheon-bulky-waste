@@ -730,6 +730,29 @@ td:first-child { font-weight: 700; }
 .office-summary p { margin: 2px 0; color: var(--muted); font-size: .84rem; }
 .badge-phone { color: var(--accent-ink); background: var(--accent-soft); border: 1px solid var(--lime-border); }
 
+.fleet-board { margin-bottom: 16px; }
+.fleet-device-grid {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px;
+}
+.fleet-card {
+  display: flex; flex-direction: column; gap: 8px; padding: 14px;
+  border: 1px solid var(--line); border-radius: var(--radius-xs); background: #ffffff;
+  cursor: pointer;
+}
+.fleet-card.is-selected { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.fleet-card.is-online { background: #f7fef9; }
+.fleet-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.fleet-card-head strong { font-size: 1.05rem; }
+.fleet-online {
+  font-size: .72rem; font-weight: 800; padding: 3px 8px; border-radius: 999px;
+}
+.fleet-online.on { color: #166534; background: #dcfce7; }
+.fleet-online.off { color: #6b7280; background: #f3f4f6; }
+.fleet-meta, .fleet-count { margin: 0; font-size: .78rem; color: var(--muted); }
+.fleet-jobs { margin: 0; padding-left: 16px; color: var(--ink); font-size: .8rem; line-height: 1.45; min-height: 3.2em; }
+.fleet-card-actions { display: grid; gap: 6px; margin-top: auto; }
+.fleet-card-actions .button { width: 100%; font-size: .8rem; padding: 8px 10px; }
+
 @media (max-width: 760px) {
   .staff-header { height: 60px; grid-template-columns: 1fr auto; padding: 0 16px; }
   .network-label { display: none; }
@@ -746,5 +769,6 @@ td:first-child { font-weight: 700; }
   .verify-heading { align-items: stretch; flex-direction: column; }
   .verify-heading .button { width: 100%; }
   .office-path-banner, .intake-grid, .intake-item-row { display: block; }
+  .fleet-device-grid { grid-template-columns: 1fr; }
   .intake-item-row .button { width: 100%; margin-top: 8px; }
 }

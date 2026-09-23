@@ -7,6 +7,7 @@ import {
   sendJson,
   ZONES
 } from "../lib/supabase.js";
+import { assigneeFilterValues } from "../lib/fleet.js";
 
 export default async function handler(req, res) {
   if (req.method === "GET") {
@@ -23,6 +24,7 @@ async function handleGet(req, res) {
   const status = url.searchParams.get("status") || undefined;
   const zone = url.searchParams.get("zone") || undefined;
   const assignee = url.searchParams.get("assignee") || undefined;
+  const deviceId = url.searchParams.get("deviceId") || undefined;
   const q = url.searchParams.get("q")?.trim() || undefined;
 
   try {
@@ -40,7 +42,13 @@ async function handleGet(req, res) {
 
       if (status) query = query.eq("status", status);
       if (zone) query = query.eq("zone", zone);
-      if (assignee) query = query.eq("assignee", assignee);
+      if (deviceId) {
+        const values = assigneeFilterValues(deviceId);
+        if (!values.length) return sendJson(res, 200, { reports: [], zones: ZONES });
+        query = query.in("assignee", values);
+      } else if (assignee) {
+        query = query.eq("assignee", assignee);
+      }
       if (q) {
         query = query.or(
           `report_no.ilike.%${q}%,address.ilike.%${q}%,address_detail.ilike.%${q}%`
@@ -64,7 +72,15 @@ async function handleGet(req, res) {
     const params = [];
     if (status) { clauses.push("status = ?"); params.push(status); }
     if (zone) { clauses.push("zone = ?"); params.push(zone); }
-    if (assignee) { clauses.push("assignee = ?"); params.push(assignee); }
+    if (deviceId) {
+      const values = assigneeFilterValues(deviceId);
+      if (!values.length) return sendJson(res, 200, { reports: [], zones: ZONES });
+      clauses.push(`assignee IN (${values.map(() => "?").join(",")})`);
+      params.push(...values);
+    } else if (assignee) {
+      clauses.push("assignee = ?");
+      params.push(assignee);
+    }
     if (q) {
       clauses.push("(report_no LIKE ? OR address LIKE ? OR address_detail LIKE ?)");
       const like = `%${q}%`;

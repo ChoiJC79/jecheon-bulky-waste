@@ -6,7 +6,8 @@ import {
   formatClusterDistance,
   suggestClusterAssignment
 } from "./nearby-clusters.js";
-import { setupOfficeIntake, refreshOfficeIntake } from "./office-intake.js";
+import { setupOfficeIntake, refreshOfficeIntake, applyFleetSnapshot } from "./office-intake.js";
+import { connectFleetSync, formatLastSeen } from "./fleet-sync.js";
 
 const capturePhoto = (...args) => globalThis.capturePhoto(...args);
 
@@ -488,6 +489,21 @@ function setupReception() {
   setupStaffMap();
   loadReports();
   setInterval(() => loadReports({ quiet: true, keepDetail: true }), 30000);
+  connectFleetSync({
+    role: "staff",
+    pollMs: 4000,
+    onSnapshot(snapshot) {
+      applyFleetSnapshot(snapshot);
+      const status = $("#fleet-sync-status");
+      if (status) {
+        const online = (snapshot.devices || []).filter((device) => device.online).length;
+        status.textContent = `실시간 동기화 · 온라인 ${online}/3 · 마지막 갱신 ${formatLastSeen(new Date().toISOString())}`;
+      }
+    },
+    onEvent() {
+      loadReports({ quiet: true, keepDetail: true });
+    }
+  });
 }
 
 async function loadVerification() {

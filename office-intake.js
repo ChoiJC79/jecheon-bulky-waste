@@ -6,10 +6,10 @@ const JECHEON_CENTER = [37.1326, 128.1910];
 const $ = (selector) => document.querySelector(selector);
 const escapeHtml = (value) => String(value ?? "").replace(/[&<>"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[character]));
 
-const DEFAULT_ASSIGNEES = [
-  "김수거 (1호차·청전의림)",
-  "이청소 (2호차·중앙교동)",
-  "박자원 (3호차·하소영천)"
+const DEFAULT_DEVICES = [
+  { id: "tablet-1", name: "1호차", zone: "청전·의림", role: "field" },
+  { id: "tablet-2", name: "2호차", zone: "중앙·교동", role: "field" },
+  { id: "tablet-spare", name: "예비", zone: "", role: "spare" }
 ];
 const ZONES = ["청전·의림", "중앙·교동", "하소·영천"];
 
@@ -19,9 +19,10 @@ const state = {
   location: null,
   beforePhoto: null,
   currentReport: null,
-  assignees: [...DEFAULT_ASSIGNEES],
+  devices: DEFAULT_DEVICES.map((device) => ({ ...device, online: false, lastSeenAt: null, assignedCount: 0, jobs: [] })),
   zones: [...ZONES],
-  pendingTransfers: []
+  pendingTransfers: [],
+  selectedDeviceId: "tablet-1"
 };
 
 let intakeMap;
@@ -328,16 +329,55 @@ function suggestedZone() {
   return "청전·의림";
 }
 
-function suggestedAssignee(zone) {
-  if (zone === "중앙·교동") return state.assignees.find((name) => name.includes("중앙")) || state.assignees[1] || state.assignees[0];
-  if (zone === "하소·영천") return state.assignees.find((name) => name.includes("하소")) || state.assignees[2] || state.assignees[0];
-  return state.assignees.find((name) => name.includes("청전")) || state.assignees[0];
+function suggestedDeviceId(zone) {
+  if (zone === "중앙·교동") return "tablet-2";
+  return "tablet-1";
+}
+
+function renderFleetBoard(rootId = "fleet-device-grid") {
+  const grid = $(`#${rootId}`);
+  if (!grid) return;
+  if (!state.devices.length) {
+    grid.innerHTML = `<p class="intake-empty">태블릿 현황을 불러오는 중입니다.</p>`;
+    return;
+  }
+  grid.innerHTML = state.devices.map((device) => {
+    const online = Boolean(device.online);
+    const lastSeen = device.lastSeenAt
+      ? new Date(device.lastSeenAt).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })
+      : "미접속";
+    const jobs = (device.jobs || []).slice(0, 3).map((job) => `<li>${escapeHtml(job.report_no.slice(-6))} · ${escapeHtml(job.address || "")}</li>`).join("")
+      || "<li>배정 건 없음</li>";
+    const selected = state.selectedDeviceId === device.id ? " is-selected" : "";
+    return `<article class="fleet-card${selected}${online ? " is-online" : ""}" data-device-id="${escapeHtml(device.id)}">
+      <div class="fleet-card-head">
+        <strong>${escapeHtml(device.name)}</strong>
+        <span class="fleet-online ${online ? "on" : "off"}">${online ? "온라인" : "오프라인"}</span>
+      </div>
+      <p class="fleet-meta">${device.role === "spare" ? "예비 태블릿" : escapeHtml(device.zone || "구역 미지정")} · 마지막 접속 ${escapeHtml(lastSeen)}</p>
+      <p class="fleet-count">배정 ${device.assignedCount || 0}건</p>
+      <ul class="fleet-jobs">${jobs}</ul>
+      <div class="fleet-card-actions">
+        <button type="button" class="button primary" data-send-device="${escapeHtml(device.id)}">이 태블릿으로 보내기</button>
+        ${device.role === "spare" ? "" : `<button type="button" class="button outline" data-takeover-from="${escapeHtml(device.id)}">예비가 인수</button>`}
+      </div>
+    </article>`;
+  }).join("");
+  grid.querySelectorAll("[data-send-device]").forEach((button) => button.addEventListener("click", () => {
+    state.selectedDeviceId = button.dataset.sendDevice;
+    sendToTablet(button.dataset.sendDevice);
+  }));
+  grid.querySelectorAll("[data-takeover-from]").forEach((button) => button.addEventListener("click", () => takeoverRoute(button.dataset.takeoverFrom)));
+  grid.querySelectorAll(".fleet-card").forEach((card) => card.addEventListener("click", (event) => {
+    if (event.target.closest("button")) return;
+    state.selectedDeviceId = card.dataset.deviceId;
+    renderDispatch();
+  }));
 }
 
 function renderDispatch() {
   const summary = $("#dispatch-report-summary");
   const zoneSelect = $("#dispatch-zone");
-  const assigneeSelect = $("#dispatch-assignee");
   const report = state.currentReport;
   if (summary) {
     summary.innerHTML = report
@@ -351,68 +391,110 @@ function renderDispatch() {
     const selected = report?.zone || suggestedZone();
     zoneSelect.innerHTML = state.zones.map((zone) => `<option value="${escapeHtml(zone)}" ${zone === selected ? "selected" : ""}>${escapeHtml(zone)}</option>`).join("");
   }
-  if (assigneeSelect) {
-    const selected = report?.assignee || suggestedAssignee(zoneSelect?.value || suggestedZone());
-    assigneeSelect.innerHTML = state.assignees.map((name) => `<option value="${escapeHtml(name)}" ${name === selected ? "selected" : ""}>${escapeHtml(name)}</option>`).join("");
-  }
+  const assigned = getFleetDeviceFromAssignee(report?.assignee);
+  if (assigned) state.selectedDeviceId = assigned.id;
+  renderFleetBoard("dispatch-device-grid");
+  renderFleetBoard("fleet-device-grid");
   const paid = report?.payment_status === "COMPLETED";
   const sendBtn = $("#dispatch-send-btn");
   if (sendBtn) sendBtn.disabled = !report || !paid;
   if (!paid && report) message("#dispatch-message", "자동이체 입금을 먼저 확인해 주세요.");
 }
 
-async function sendToTablet() {
+function getFleetDeviceFromAssignee(assignee) {
+  if (!assignee) return null;
+  return state.devices.find((device) => device.id === assignee || device.name === assignee || String(assignee).includes(device.name)) || null;
+}
+
+async function sendToTablet(deviceId = state.selectedDeviceId) {
   const report = state.currentReport;
   if (!report) return message("#dispatch-message", "전송할 접수 건이 없습니다.");
   if (report.payment_status !== "COMPLETED") {
     setStep(2);
     return message("#transfer-message", "태블릿으로 보내기 전에 자동이체 입금을 확인해 주세요.");
   }
-  const zone = $("#dispatch-zone").value;
-  const assignee = $("#dispatch-assignee").value;
+  const device = state.devices.find((item) => item.id === deviceId);
+  if (!device || deviceId === "__ALL__") return message("#dispatch-message", "1호차·2호차·예비 중 보낼 태블릿을 선택해 주세요.");
+  const zone = $("#dispatch-zone")?.value || suggestedZone();
   const button = $("#dispatch-send-btn");
-  button.disabled = true;
-  message("#dispatch-message", "담당자 태블릿으로 전송하고 있습니다…");
+  if (button) button.disabled = true;
+  message("#dispatch-message", `${device.name} 태블릿으로 전송하고 있습니다…`);
   try {
     const response = await fetch(`/api/reports/${encodeURIComponent(report.report_no)}/status`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ action: "assign", zone, assignee })
+      body: JSON.stringify({ action: "assign", zone, assignee: device.id, deviceId: device.id })
     });
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || "전송에 실패했습니다.");
     state.currentReport = result.report;
+    state.selectedDeviceId = device.id;
     await onReportsChanged();
+    await loadFleet();
     renderDispatch();
     const link = $("#dispatch-tablet-link");
     if (link) {
       link.hidden = false;
-      link.href = "tablet.html";
+      link.href = `tablet.html?device=${encodeURIComponent(device.id)}`;
+      link.textContent = `${device.name} 태블릿에서 방금 보낸 건 확인`;
     }
-    message("#dispatch-message", `${assignee} 태블릿으로 보냈습니다. 현장 기기를 해당 담당자로 열면 목록에 나타납니다.`);
+    message("#dispatch-message", `${device.name}로 보냈습니다. 해당 안드로이드 태블릿 목록이 바로 갱신됩니다.`);
   } catch (error) {
     message("#dispatch-message", error.message);
   } finally {
-    button.disabled = false;
+    if (button) button.disabled = false;
+  }
+}
+
+async function takeoverRoute(fromDeviceId) {
+  const from = state.devices.find((device) => device.id === fromDeviceId);
+  if (!from) return;
+  message("#dispatch-message", `${from.name} 경로를 예비 태블릿이 인수합니다…`);
+  try {
+    const response = await fetch("/api/fleet/takeover", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ fromDeviceId, toDeviceId: "tablet-spare" })
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "인수에 실패했습니다.");
+    await onReportsChanged();
+    await loadFleet();
+    renderDispatch();
+    message("#dispatch-message", `${from.name} ${result.moved}건을 예비 태블릿이 인수했습니다.`);
+  } catch (error) {
+    message("#dispatch-message", error.message);
+  }
+}
+
+async function loadFleet(snapshot) {
+  try {
+    const data = snapshot || await (await fetch("/api/fleet")).json();
+    if (Array.isArray(data.devices) && data.devices.length) {
+      state.devices = data.devices.filter((device) => device.id !== "__ALL__");
+    }
+    if (Array.isArray(data.zones) && data.zones.length) state.zones = data.zones;
+    renderFleetBoard("fleet-device-grid");
+    renderFleetBoard("dispatch-device-grid");
+  } catch {
+    /* 기본 3대 유지 */
   }
 }
 
 async function loadAssignees() {
-  try {
-    const response = await fetch("/api/staff-assignees");
-    if (!response.ok) return;
-    const data = await response.json();
-    if (Array.isArray(data.assignees) && data.assignees.length) state.assignees = data.assignees;
-    if (Array.isArray(data.zones) && data.zones.length) state.zones = data.zones;
-  } catch {
-    /* 기본 담당자 목록 유지 */
-  }
+  await loadFleet();
 }
 
 export function refreshOfficeIntake() {
   invalidateOfficeMap();
   if (state.step !== 1) refreshTransferQueue();
 }
+
+export function applyFleetSnapshot(snapshot) {
+  if (snapshot) loadFleet(snapshot);
+}
+
+export { loadFleet };
 
 export function setupOfficeIntake(options = {}) {
   onReportsChanged = options.onReportsChanged || (async () => {});
@@ -448,10 +530,12 @@ export function setupOfficeIntake(options = {}) {
     if (preview) preview.hidden = true;
   });
   $("#transfer-confirm-btn")?.addEventListener("click", confirmTransfer);
-  $("#dispatch-send-btn")?.addEventListener("click", sendToTablet);
+  $("#dispatch-send-btn")?.addEventListener("click", () => sendToTablet(state.selectedDeviceId));
   $("#dispatch-zone")?.addEventListener("change", () => {
-    const assigneeSelect = $("#dispatch-assignee");
-    if (assigneeSelect && !state.currentReport?.assignee) assigneeSelect.value = suggestedAssignee($("#dispatch-zone").value);
+    if (!state.currentReport?.assignee) {
+      state.selectedDeviceId = suggestedDeviceId($("#dispatch-zone").value);
+      renderDispatch();
+    }
   });
   document.querySelectorAll("[data-office-step]").forEach((button) => button.addEventListener("click", () => setStep(Number(button.dataset.officeStep))));
   $("#office-goto-confirm")?.addEventListener("click", () => setStep(2));

@@ -47,6 +47,8 @@ test("내부 업무 화면은 접수·현장·데이터 검증 역할을 제공�
   assert.match(app, /buildNearbyClusters/);
   assert.match(app, /assignClusterTogether/);
   assert.match(app, /setInterval\(\(\) => loadReports\(\{ quiet: true, keepDetail: true \}\), 30000\)/);
+  assert.match(app, /connectFleetSync/);
+  assert.match(html, /id="fleet-board"/);
 });
 
 test("사무실 전화 접수는 입력·자동이체 확인·태블릿 전송 절차를 제공한다", async () => {
@@ -60,13 +62,18 @@ test("사무실 전화 접수는 입력·자동이체 확인·태블릿 전송 �
   assert.match(html, /id="transfer-confirm-btn"/);
   assert.match(html, /id="dispatch-send-btn"/);
   assert.match(html, /사무실 PC 전용 전화 접수/);
-  assert.match(html, /담당자에게 전송 \(태블릿\)/);
+  assert.match(html, /선택한 태블릿으로 전송/);
+  assert.match(html, /id="fleet-board"/);
+  assert.match(html, /id="fleet-device-grid"/);
   assert.match(html, /href="tablet.html"/);
   assert.match(intake, /channel: "PHONE"/);
   assert.match(intake, /action: "confirm_transfer"/);
   assert.match(intake, /action: "assign"/);
+  assert.match(intake, /deviceId: device\.id/);
   assert.match(intake, /paymentMethod: "transfer"/);
   assert.match(tablet, /현장 수거 태블릿/);
+  assert.match(tablet, /tablet.webmanifest/);
+  assert.doesNotMatch(tablet, /value="__ALL__"/);
   assert.match(tabletCss, /\[hidden\] \{ display: none !important; \}/);
 });
 

@@ -34,7 +34,7 @@
         </span>
         <span>대형 폐기물 접수 관리</span>
       </a>
-      <div class="network-label"><span></span> 내부 행정망 전용 · 사무실 PC</div>
+      <div class="network-label"><span></span> 외부망 · 전화접수 운영 · 사무실 PC</div>
       <div style="display:flex;align-items:center;gap:10px;">
         <a href="tablet.html" class="button outline" style="padding:6px 14px;font-size:13px;text-decoration:none;border-radius:8px;background:#e6f5ec;color:#107c41;border-color:#6ee7b7;font-weight:800;display:inline-flex;align-items:center;gap:6px;">🚜 현장 수거 태블릿</a>
         <button type="button" class="profile">김담당 <small>사무실 접수 담당자</small></button>
@@ -43,7 +43,7 @@
     <main class="staff-main">
       <section class="staff-intro">
         <div><h1>전화로 받은 신고를<br /><em>사무실에서 접수해요.</em></h1></div>
-        <p>시민 웹 폼으로 보내지 않고, 전화 내용을 입력한 뒤 자동이체 입금을 확인하고 현장 태블릿으로 보냅니다. 가까운 미배정 건은 접수·배정 탭에서 묶어 배정할 수 있어요.</p>
+        <p>시민 웹 폼으로 보내지 않고, 전화 내용을 입력한 뒤 자동이체 입금을 확인하고 1호차·2호차·예비 안드로이드 태블릿으로 바로 보냅니다. 가까운 미배정 건은 접수·배정 탭에서 묶어 배정할 수 있어요.</p>
       </section>
       <div class="role-tabs" role="tablist" aria-label="업무 역할">
         <button role="tab" aria-selected="true" data-tab="intake">전화 접수</button>
@@ -56,10 +56,18 @@
         <aside class="office-path-banner" aria-label="사무실과 현장 구분">
           <div>
             <strong>사무실 PC 전용 전화 접수</strong>
-            <p>시민에게 공개 웹 신고 화면을 안내하지 않습니다. 품목·위치·사진·수수료를 여기서 입력하고, 자동이체 입금을 확인한 다음 담당자 태블릿으로 보냅니다.</p>
+            <p>시민에게 공개 웹 신고 화면을 안내하지 않습니다. 품목·위치·사진·수수료를 여기서 입력하고, 자동이체 입금을 확인한 다음 1호차·2호차·예비 태블릿으로 보냅니다. 새올과 연결하지 않으며 외부망만 사용합니다.</p>
           </div>
           <a href="tablet.html" class="button outline">현장 태블릿 열기</a>
         </aside>
+        <section class="work-card fleet-board" id="fleet-board" aria-labelledby="fleet-title">
+          <div class="section-head">
+            <h2 id="fleet-title">현장 안드로이드 태블릿 3대</h2>
+            <p>1호차 · 2호차 · 예비. 전송하면 해당 기기만 바로 받습니다. 전체 배정(__ALL__)은 쓰지 않습니다. 위치는 작업 건을 열 때만 쓰고, 상시 추적하지 않습니다.</p>
+          </div>
+          <p class="list-status" id="fleet-sync-status" role="status">태블릿 연결 대기</p>
+          <div class="fleet-device-grid" id="fleet-device-grid"></div>
+        </section>
         <ol class="office-steps progress-steps" id="office-steps" aria-label="사무실 전화 접수 절차">
           <li class="is-current" data-office-step="1"><span>1</span>접수 입력</li>
           <li data-office-step="2"><span>2</span>자동이체 확인</li>
@@ -148,17 +156,18 @@
         <section class="work-card office-step-panel" id="office-step-3" hidden>
           <div class="section-head">
             <h2>담당자 태블릿으로 전송</h2>
-            <p>입금이 확인된 건만 현장 수거 담당자에게 보냅니다. 전송하면 해당 담당자로 설정된 태블릿 목록에 나타납니다.</p>
+            <p>입금이 확인된 건만 1호차·2호차·예비 태블릿으로 보냅니다. 보낸 기기는 새로고침 없이 목록이 바로 갱신됩니다.</p>
           </div>
           <div id="dispatch-report-summary" class="office-summary"></div>
           <div class="intake-grid">
             <label>수거구역<select id="dispatch-zone"></select></label>
-            <label>수거 담당자<select id="dispatch-assignee"></select></label>
           </div>
+          <p class="selection-label">보낼 태블릿</p>
+          <div class="fleet-device-grid" id="dispatch-device-grid"></div>
           <p class="form-message" id="dispatch-message"></p>
           <div class="step-nav-row">
             <button class="button outline" type="button" id="office-goto-dispatch">입금 확인으로</button>
-            <button class="button primary" type="button" id="dispatch-send-btn">담당자에게 전송 (태블릿)</button>
+            <button class="button primary" type="button" id="dispatch-send-btn">선택한 태블릿으로 전송</button>
           </div>
           <p class="card-note"><a href="tablet.html" id="dispatch-tablet-link" hidden>현장 태블릿에서 방금 보낸 건 확인</a></p>
         </section>

@@ -7,6 +7,7 @@ import {
   sendJson,
   ZONES
 } from "../../lib/supabase.js";
+import { FLEET_DEVICES, getFleetDevice, notifyReportChange } from "../../lib/fleet.js";
 
 export default async function handler(req, res) {
   if (req.method !== "PATCH") {
@@ -53,7 +54,15 @@ export default async function handler(req, res) {
 
     if (body.action === "assign") {
       if (!ZONES.includes(body.zone)) return sendJson(res, 400, { error: "수거구역을 선택해 주세요." });
-      const assignee = typeof body.assignee === "string" ? body.assignee.trim() || null : null;
+      if (body.deviceId === "__ALL__" || body.assignee === "__ALL__") {
+        return sendJson(res, 400, { error: "전체 배정(__ALL__)은 운영하지 않습니다. 1호차·2호차·예비 중 하나를 선택해 주세요." });
+      }
+      let assignee = typeof body.assignee === "string" ? body.assignee.trim() || null : null;
+      const device = getFleetDevice(body.deviceId) || (FLEET_DEVICES.some((item) => item.id === assignee || item.name === assignee) ? getFleetDevice(assignee) : null);
+      if (body.deviceId && !getFleetDevice(body.deviceId)) {
+        return sendJson(res, 400, { error: "등록된 현장 태블릿만 선택할 수 있습니다." });
+      }
+      if (device) assignee = device.id;
       updates = { status: "ASSIGNED", zone: body.zone, assignee, memo: null, updated_at: updatedAt };
       auditAction = "ASSIGNED";
       auditRole = "RECEPTION";
@@ -142,7 +151,7 @@ export default async function handler(req, res) {
         items: updatedReport?.report_items || []
       };
       delete report.report_items;
-
+      notifyReportChange(null, { action: body.action === "assign" ? "assigned" : body.action, report });
       return sendJson(res, 200, { report });
     }
 
@@ -165,7 +174,7 @@ export default async function handler(req, res) {
     const reportSelect = "SELECT report_no, status, payment_method, payment_status, address, address_detail, latitude, longitude, zone, assignee, memo, before_photo, after_photo, total_fee, created_at, updated_at, citizen_name, citizen_phone, channel FROM reports";
     const report = db.prepare(`${reportSelect} WHERE report_no = ?`).get(reportNo);
     report.items = db.prepare("SELECT name, option_name, quantity, unit_fee FROM report_items WHERE report_no = ?").all(reportNo);
-
+    notifyReportChange(db, { action: body.action === "assign" ? "assigned" : body.action, report });
     return sendJson(res, 200, { report });
   } catch (error) {
     return sendJson(res, 500, { error: error.message || "상태 변경 중 오류가 발생했습니다." });
