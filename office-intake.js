@@ -183,7 +183,14 @@ function addCustomCartItem() {
   if ($("#intake-custom-option")) $("#intake-custom-option").value = "";
   if ($("#intake-custom-fee")) $("#intake-custom-fee").value = "";
   if ($("#intake-custom-qty")) $("#intake-custom-qty").value = "1";
-  message("#intake-message", `${result.item.name}을 수기로 추가했습니다. 조례 목록에 없어도 접수됩니다.`);
+  message("#intake-message", `${result.item.name}${topicParticle(result.item.name).replace("는", "를").replace("은", "을")} 수기로 추가했습니다. 조례 목록에 없어도 접수됩니다.`);
+}
+
+function topicParticle(name) {
+  const last = String(name).slice(-1);
+  const code = last.charCodeAt(0);
+  if (code < 0xac00 || code > 0xd7a3) return "는";
+  return (code - 0xac00) % 28 ? "은" : "는";
 }
 
 function renderExcludedHint() {
@@ -198,7 +205,7 @@ function renderExcludedHint() {
   }
   const fees = (hit.ordinanceFees || []).map(([label, fee]) => `${label} ${won.format(fee)}원`).join(" · ");
   box.hidden = false;
-  box.innerHTML = `<strong>${escapeHtml(hit.name)}은 대형폐기물 목록에 넣지 않습니다.</strong>
+  box.innerHTML = `<strong>${escapeHtml(hit.name)}${topicParticle(hit.name)} 대형폐기물 목록에 넣지 않습니다.</strong>
     <p>${escapeHtml(hit.guide?.title || "다른 배출 경로를 안내하세요.")}</p>
     <p>${escapeHtml((hit.guide?.steps || []).join(" "))}</p>
     ${fees ? `<p>무상수거가 안 될 때만 수기 입력하세요. 조례 참고 수수료: ${escapeHtml(fees)}</p>` : ""}`;
