@@ -1,104 +1,6 @@
-const applianceGuide = (name, extra = "") => ({
-  title: `${name}은 폐가전 무상방문수거로 배출하세요.`,
-  source: "폐가전 무상방문수거",
-  sourceUrl: "https://www.15990903.or.kr/portal/cnts/userGuide.do",
-  reservationUrl: "https://www.15990903.or.kr/portal/reserve/reserve.do",
-  reservationLabel: `${name} 무상수거 예약하기`,
-  steps: [
-    `아래 “${name} 무상수거 예약하기” 링크 또는 1599-0903에서 배출 품목과 주소를 예약합니다.`,
-    "예약한 날짜에 수거매니저가 가정 내 또는 요청한 문전에서 수거합니다.",
-    "설치·고정 제품은 기본 철거를 마친 상태여야 하며, 분해·훼손된 제품은 수거가 어렵습니다.",
-    "프린터·복사기·팩시밀리는 잉크·토너가 새지 않도록 분리하거나 고정합니다."
-  ],
-  notice: extra || "냉장고·세탁기·에어컨·TV 등은 단일 수거가 가능하며, 중소형 가전은 5개 이상일 때 방문수거를 신청할 수 있습니다."
-});
+import { CITIZEN_ITEM_CATALOG as catalog, ITEM_SYNONYMS as SYNONYMS } from "./office-catalog.js";
 
-const catalog = [
-  { id: "living", icon: "⌂", name: "거실·침실 가구", items: [
-    { name: "소파", options: [["1인용", 3000], ["2인용", 5000], ["3인용 이상", 8000]] },
-    { name: "침대", options: [["프레임", 5000], ["매트리스", 6000], ["세트", 10000]] },
-    { name: "장롱", options: [["1쪽", 5000], ["2쪽", 10000], ["3쪽 이상", 15000]] },
-    { name: "서랍장", options: [["3단 이하", 3000], ["4단 이상", 5000]] },
-    { name: "TV장식장", options: [["1m 미만", 3000], ["1m 이상", 5000]] },
-    { name: "신발장", options: [["소형", 3000], ["대형", 5000]] },
-    { name: "화장대", options: [["일반", 3000], ["대형", 5000]] }
-  ] },
-  { id: "kitchen", icon: "▤", name: "주방·식탁 가구", items: [
-    { name: "식탁", options: [["2인용", 3000], ["4인용", 5000], ["6인용 이상", 7000]] },
-    { name: "식탁의자", options: [["일반", 1000], ["대형", 2000]] },
-    { name: "찬장", options: [["소형", 3000], ["대형", 5000]] },
-    { name: "싱크대", options: [["1m 미만", 4000], ["1m 이상", 7000]] },
-    { name: "아일랜드 식탁", options: [["일반", 5000], ["대형", 8000]] }
-  ] },
-  { id: "office", icon: "▥", name: "학습·사무 가구", items: [
-    { name: "책상", options: [["1m 미만", 3000], ["1m 이상", 5000]] },
-    { name: "책장", options: [["3단 이하", 3000], ["4단 이상", 5000]] },
-    { name: "사무용 의자", options: [["일반", 2000], ["대형", 3000]] },
-    { name: "파일캐비닛", options: [["2단 이하", 3000], ["3단 이상", 5000]] },
-    { name: "화이트보드", options: [["소형", 2000], ["대형", 4000]] }
-  ] },
-  { id: "life", icon: "◫", name: "침구·생활용품", items: [
-    { name: "매트리스", options: [["1인용", 5000], ["2인용", 7000]] },
-    { name: "카펫", options: [["3㎡ 미만", 2000], ["3㎡ 이상", 4000]] },
-    { name: "전신거울", options: [["일반", 2000], ["대형", 3000]] },
-    { name: "유아용품", options: [["유모차", 3000], ["아기침대", 5000]] },
-    { name: "여행가방", options: [["소형", 2000], ["대형", 3000]] }
-  ] },
-  { id: "appliance", icon: "◉", name: "가전제품", items: [
-    { name: "냉장고", guide: applianceGuide("냉장고", "가정용·업소용·냉동고·김치냉장고 등은 단일 수거 대상입니다. 내부 음식물과 포장재를 먼저 비워 주세요.") },
-    { name: "세탁기", guide: applianceGuide("세탁기", "일반·드럼·탈수기 등은 단일 수거 대상입니다. 급수호스와 내부 물기를 정리해 주세요.") },
-    { name: "에어컨", guide: applianceGuide("에어컨", "실내기·실외기·일체형은 단일 수거 대상입니다. 설치 제품은 기본 철거가 끝난 경우에만 수거합니다.") },
-    { name: "텔레비전", guide: applianceGuide("텔레비전", "31인치 이상 TV는 단일 수거 대상이며, 30인치 이하 TV·모니터는 5개 이상 다량 배출 기준을 확인해 주세요.") },
-    { name: "전자레인지", guide: applianceGuide("전자레인지") },
-    { name: "식기세척기", guide: applianceGuide("식기세척기", "단일 수거 대상입니다. 빌트인 제품은 수거 가능한 상태로 철거되어야 합니다.") },
-    { name: "공기청정기·제습기", guide: applianceGuide("공기청정기·제습기") },
-    { name: "노트북·프린터", guide: applianceGuide("노트북·프린터", "노트북·프린터는 5개 이상 다량 배출 기준을 확인해 주세요. 프린터는 토너·잉크 누출을 방지해 배출합니다.") }
-  ] },
-  { id: "leisure", icon: "◌", name: "운동·레저", items: [
-    { name: "자전거", options: [["일반", 3000], ["전기", 5000]] },
-    { name: "러닝머신", options: [["일반", 8000], ["대형", 12000]] },
-    { name: "텐트", options: [["소형", 2000], ["대형", 4000]] },
-    { name: "골프가방", options: [["일반", 2000], ["대형", 3000]] },
-    { name: "파라솔", options: [["일반", 2000], ["대형", 3000]] }
-  ] },
-  { id: "outdoor", icon: "⌘", name: "기타·야외용품", items: [
-    { name: "화분", options: [["소형", 1000], ["대형", 3000]] },
-    { name: "빨래건조대", options: [["일반", 2000], ["대형", 3000]] },
-    { name: "방충망", options: [["소형", 2000], ["대형", 4000]] },
-    { name: "문짝", options: [["일반", 3000], ["대형", 5000]] }
-  ] },
-  { id: "recycling", icon: "♻", name: "재활용·분리배출", items: [
-    { name: "투명 페트병", guide: { title: "투명 페트병 배출 방법", source: "환경부 재활용품 분리배출 안내", sourceUrl: "https://www.mcee.go.kr/home/web/board/read.do?boardCategoryId=&boardId=1398800&boardMasterId=54", steps: ["내용물을 비우고 물로 헹궈 이물질을 제거합니다.", "라벨을 떼고 가능한 한 찌그러뜨립니다.", "투명 페트병은 유색 플라스틱과 분리해 지정 수거함에 배출합니다."], notice: "음료·생수병 기준입니다. 오염이 제거되지 않으면 재활용이 어려울 수 있습니다." } },
-    { name: "종이·골판지", guide: { title: "종이·골판지 배출 방법", source: "환경부 재활용품 분리배출 안내", sourceUrl: "https://www.mcee.go.kr/home/web/board/read.do?boardCategoryId=&boardId=1398800&boardMasterId=54", steps: ["택배 상자의 송장, 테이프, 완충재를 제거합니다.", "이물질이 섞이지 않도록 접어서 종이류로 배출합니다.", "종이팩은 일반 종이와 구분해 전용 수거함에 배출하고, 없으면 따로 묶어 배출합니다."], notice: "기름·음식물에 오염된 종이는 종량제봉투로 배출합니다." } },
-    { name: "플라스틱 용기", guide: { title: "플라스틱 용기 배출 방법", source: "환경부 재활용품 분리배출 안내", sourceUrl: "https://www.mcee.go.kr/home/web/board/read.do?boardCategoryId=&boardId=1398800&boardMasterId=54", steps: ["내용물과 물기를 제거합니다.", "뚜껑·라벨·은박지 등 다른 재질을 가능한 한 분리합니다.", "재질별로 분리해 재활용품 수거함에 배출합니다."], notice: "세척해도 이물질이 제거되지 않는 용기는 종량제봉투로 배출합니다." } },
-    { name: "캔·고철", guide: { title: "캔·고철 배출 방법", source: "환경부 재활용품 분리배출 안내", sourceUrl: "https://www.mcee.go.kr/home/web/board/read.do?boardCategoryId=&boardId=1398800&boardMasterId=54", steps: ["내용물을 비우고 물로 헹궈 건조합니다.", "플라스틱 뚜껑 등 다른 재질은 분리합니다.", "날카로운 부분은 안전하게 처리한 뒤 캔·고철류 수거함에 배출합니다."], notice: "페인트·기름 등이 묻어 있는 금속은 재활용 대상이 아닐 수 있습니다." } },
-    { name: "유리병", guide: { title: "유리병 배출 방법", source: "환경부 재활용품 분리배출 안내", sourceUrl: "https://www.mcee.go.kr/home/web/board/read.do?boardCategoryId=&boardId=1398800&boardMasterId=54", steps: ["내용물을 비우고 물로 헹굽니다.", "병뚜껑·마개는 다른 재질로 분리합니다.", "깨지지 않은 유리병만 유리병 수거함에 배출합니다."], notice: "깨진 병과 판유리는 신문지 등으로 감싸 일반 또는 불연성 폐기물 기준에 따라 배출합니다." } },
-    { name: "폐건전지·형광등", guide: { title: "폐건전지·형광등 배출 방법", source: "지자체 전용 수거함 기준", sourceUrl: "https://www.mcee.go.kr/home/web/board/read.do?boardCategoryId=&boardId=1398800&boardMasterId=54", steps: ["폐건전지와 형광등은 일반 재활용품·종량제봉투에 섞지 않습니다.", "주민센터, 공동주택, 판매점 등에 설치된 전용 수거함을 확인합니다.", "형광등은 깨지지 않도록 포장해 전용 수거함에 넣습니다."], notice: "전용 수거함 위치와 수거 품목은 단지·지역 기준이 다를 수 있습니다." } }
-  ] }
-];
-
-const SYNONYMS = {
-  "쇼파": "소파",
-  "싱크대": "싱크대", "씽크대": "싱크대",
-  "티비": "텔레비전", "텔레비젼": "텔레비전", "tv": "텔레비전",
-  "선풍기": "에어컨", "에어콘": "에어컨",
-  "김치냉장고": "냉장고", "냉동고": "냉장고",
-  "세탁기": "세탁기", "건조기": "세탁기",
-  "컴퓨터": "노트북·프린터", "모니터": "노트북·프린터", "피씨": "노트북·프린터", "pc": "노트북·프린터",
-  "매트": "매트리스", "라텍스": "매트리스",
-  "서랍": "서랍장", "수납장": "서랍장",
-  "식탁의자": "식탁의자", "체어": "식탁의자", "의자": "사무용 의자",
-  "아기침대": "유아용품", "유모차": "유아용품", "카시트": "유아용품",
-  "러닝머신": "러닝머신", "런닝머신": "러닝머신", "트레드밀": "러닝머신",
-  "거울": "전신거울",
-  "화장대": "화장대", "콘솔": "화장대",
-  "페트병": "투명 페트병", "생수병": "투명 페트병",
-  "박스": "종이·골판지", "골판지": "종이·골판지", "택배상자": "종이·골판지",
-  "플라스틱": "플라스틱 용기",
-  "캔": "캔·고철", "고철": "캔·고철", "냄비": "캔·고철", "프라이팬": "캔·고철",
-  "건전지": "폐건전지·형광등", "배터리": "폐건전지·형광등", "형광등": "폐건전지·형광등", "전구": "폐건전지·형광등"
-};
-
+const capturePhoto = (...args) => globalThis.capturePhoto(...args);
 const state = { category: catalog[0], selected: null, cart: [], location: null, beforePhoto: null, currentStep: 1 };
 const won = new Intl.NumberFormat("ko-KR");
 const $ = (selector) => document.querySelector(selector);
@@ -207,12 +109,13 @@ $("#item-search").addEventListener("input", (event) => {
 document.querySelectorAll(".quick-chip").forEach((button) => {
   button.addEventListener("click", () => {
     const query = button.dataset.quick;
-    const cat = catalog.find((c) => c.items.some((i) => i.name === query));
+    const canonical = SYNONYMS[query] || query;
+    const cat = catalog.find((c) => c.items.some((i) => i.name === canonical || i.name === query));
     if (cat) {
       state.category = cat;
       renderCategories();
       renderItems();
-      const targetItem = cat.items.find((i) => i.name === query);
+      const targetItem = cat.items.find((i) => i.name === canonical || i.name === query);
       if (targetItem) {
         state.selected = targetItem;
         renderSelection();

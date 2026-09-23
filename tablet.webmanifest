@@ -1,0 +1,12 @@
+{
+  "name": "제천시 대형폐기물 수거 태블릿",
+  "short_name": "수거 태블릿",
+  "start_url": "./tablet.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "landscape",
+  "background_color": "#192a24",
+  "theme_color": "#192a24",
+  "lang": "ko",
+  "description": "제천시 대형폐기물 현장 수거 전용 안드로이드 태블릿"
+}

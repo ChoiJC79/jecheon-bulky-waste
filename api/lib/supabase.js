@@ -23,6 +23,7 @@ let localDb = null;
 export function getLocalDb() {
   if (!localDb) {
     localDb = new DatabaseSync(join(root, "data", "waste.db"));
+    localDb.exec("PRAGMA journal_mode = WAL;");
     localDb.exec(`
       CREATE TABLE IF NOT EXISTS reports (
         report_no TEXT PRIMARY KEY,
@@ -62,12 +63,29 @@ export function getLocalDb() {
     for (const [col, type] of [
       ["latitude", "REAL"], ["longitude", "REAL"], ["zone", "TEXT"],
       ["assignee", "TEXT"], ["memo", "TEXT"], ["updated_at", "TEXT"],
-      ["before_photo", "TEXT"], ["after_photo", "TEXT"]
+      ["before_photo", "TEXT"], ["after_photo", "TEXT"],
+      ["citizen_name", "TEXT"], ["citizen_phone", "TEXT"], ["channel", "TEXT"]
     ]) {
       if (!reportColumns.includes(col)) {
         localDb.exec(`ALTER TABLE reports ADD COLUMN ${col} ${type}`);
       }
     }
+    localDb.exec(`
+      CREATE TABLE IF NOT EXISTS fleet_presence (
+        device_id TEXT PRIMARY KEY,
+        last_seen_at TEXT NOT NULL,
+        bound_at TEXT,
+        active_report_no TEXT
+      );
+      CREATE TABLE IF NOT EXISTS fleet_events (
+        seq INTEGER PRIMARY KEY AUTOINCREMENT,
+        event_type TEXT NOT NULL,
+        device_id TEXT,
+        report_no TEXT,
+        payload TEXT,
+        created_at TEXT NOT NULL
+      );
+    `);
   }
   return localDb;
 }

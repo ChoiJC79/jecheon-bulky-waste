@@ -212,3 +212,77 @@ test("시민이 현금결제로 신고하면 현금수납대기(PENDING_CASH_REC
     assert.equal(afterData.report.payment_status, "COMPLETED");
   });
 });
+
+test("사무실 전화 접수는 자동이체 대기 후 입금 확인·담당자 배정이 되면 태블릿 목록에 나타난다", async () => {
+  await withServer(async (base) => {
+    const missingCitizen = await fetch(`${base}/api/reports`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        address: "충청북도 제천시 의병대로 123 (청전동)",
+        addressDetail: "현관 앞 분리수거장",
+        paymentMethod: "transfer",
+        channel: "PHONE",
+        location: { latitude: 37.1326, longitude: 128.1910 },
+        items: [{ name: "소파", option: "2인용", fee: 5000, quantity: 1 }]
+      })
+    });
+    assert.equal(missingCitizen.status, 400);
+
+    const createRes = await fetch(`${base}/api/reports`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        address: "충청북도 제천시 의병대로 123 (청전동)",
+        addressDetail: "현관 앞 분리수거장",
+        paymentMethod: "transfer",
+        channel: "PHONE",
+        citizenName: "홍길동",
+        citizenPhone: "010-1234-5678",
+        location: { latitude: 37.1326, longitude: 128.1910 },
+        items: [{ name: "소파", option: "2인용", fee: 5000, quantity: 1 }]
+      })
+    });
+    assert.equal(createRes.status, 201);
+    const created = await createRes.json();
+    assert.equal(created.paymentStatus, "PENDING_TRANSFER");
+    assert.equal(created.totalFee, 5000);
+    const { reportNo } = created;
+
+    const listRes = await fetch(`${base}/api/reports`);
+    const listData = await listRes.json();
+    const phoneReport = listData.reports.find((r) => r.report_no === reportNo);
+    assert.ok(phoneReport);
+    assert.equal(phoneReport.channel, "PHONE");
+    assert.equal(phoneReport.citizen_name, "홍길동");
+    assert.equal(phoneReport.payment_status, "PENDING_TRANSFER");
+    assert.equal(phoneReport.status, "RECEIVED");
+
+    const confirmRes = await fetch(`${base}/api/reports/${reportNo}/status`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "confirm_transfer" })
+    });
+    assert.equal(confirmRes.status, 200);
+    const confirmed = await confirmRes.json();
+    assert.equal(confirmed.report.payment_status, "COMPLETED");
+
+    const assignRes = await fetch(`${base}/api/reports/${reportNo}/status`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "assign", zone: "청전·의림", assignee: "김수거 (1호차·청전의림)" })
+    });
+    assert.equal(assignRes.status, 200);
+    const assigned = await assignRes.json();
+    assert.equal(assigned.report.status, "ASSIGNED");
+    assert.equal(assigned.report.assignee, "김수거 (1호차·청전의림)");
+
+    const tabletRes = await fetch(`${base}/api/reports?assignee=${encodeURIComponent("김수거 (1호차·청전의림)")}`);
+    assert.equal(tabletRes.status, 200);
+    const tabletData = await tabletRes.json();
+    const tabletJob = tabletData.reports.find((r) => r.report_no === reportNo);
+    assert.ok(tabletJob, "배정된 전화 접수 건이 담당자 태블릿 목록에 있어야 한다");
+    assert.equal(tabletJob.status, "ASSIGNED");
+    assert.equal(tabletJob.channel, "PHONE");
+  });
+});

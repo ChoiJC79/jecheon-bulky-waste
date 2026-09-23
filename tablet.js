@@ -7,11 +7,34 @@
    - 음성 안내(TTS) 및 야외 고대비 모드
    ========================================================================== */
 
+import { connectFleetSync } from "./fleet-sync.js";
+
+const capturePhoto = (...args) => globalThis.capturePhoto(...args);
+
 const won = new Intl.NumberFormat("ko-KR");
 const JECHEON_CENTER = [37.1326, 128.1910];
+const DEVICE_CATALOG = [
+  { id: "tablet-1", name: "1호차", zone: "청전·의림", role: "field", pin: "1111" },
+  { id: "tablet-2", name: "2호차", zone: "중앙·교동", role: "field", pin: "2222" },
+  { id: "tablet-spare", name: "예비", zone: "", role: "spare", pin: "0000" }
+];
+const DEVICE_STORAGE_KEY = "waste_tablet_device_id";
+
+function readStoredDeviceId() {
+  const fromUrl = new URLSearchParams(location.search).get("device");
+  if (fromUrl && DEVICE_CATALOG.some((device) => device.id === fromUrl)) return fromUrl;
+  const sessionValue = sessionStorage.getItem(DEVICE_STORAGE_KEY);
+  if (sessionValue && DEVICE_CATALOG.some((device) => device.id === sessionValue)) return sessionValue;
+  const localValue = localStorage.getItem(DEVICE_STORAGE_KEY);
+  if (localValue && DEVICE_CATALOG.some((device) => device.id === localValue)) return localValue;
+  const legacy = localStorage.getItem("waste_tablet_assignee") || "";
+  const migrated = DEVICE_CATALOG.find((device) => legacy.includes(device.name) || legacy === device.id);
+  return migrated?.id || "";
+}
 
 const state = {
-  assignee: localStorage.getItem("waste_tablet_assignee") || "",
+  deviceId: readStoredDeviceId(),
+  device: null,
   tasks: [],
   selectedReportNo: null,
   filter: "PENDING", // PENDING | COLLECTED | ALL
@@ -101,7 +124,12 @@ function updateMap(report, userCoords) {
     state.reportMarker = null;
   }
 
-  if (userCoords && Number.isFinite(userCoords.latitude) && Number.isFinite(userCoords.longitude)) {
+  const distToUser = report && userCoords
+    ? calculateDistanceMeters(report.latitude, report.longitude, userCoords.latitude, userCoords.longitude)
+    : null;
+  const userIsNearby = distToUser !== null && distToUser <= 20000;
+
+  if (userIsNearby) {
     const uPos = [userCoords.latitude, userCoords.longitude];
     points.push(uPos);
     if (!state.userMarker) {
@@ -115,7 +143,10 @@ function updateMap(report, userCoords) {
     } else {
       state.userMarker.setLatLng(uPos);
     }
-    state.userMarker.bindTooltip("🚜 현재 내 태블릿 위치", { direction: "bottom", offset: [0, 8] });
+    state.userMarker.bindTooltip("🚜 현재 위치 (이 작업 건)", { direction: "bottom", offset: [0, 8] });
+  } else if (state.userMarker) {
+    state.map.removeLayer(state.userMarker);
+    state.userMarker = null;
   }
 
   if (points.length === 2) {
@@ -127,6 +158,18 @@ function updateMap(report, userCoords) {
   }
 }
 
+function deviceById(id) {
+  return DEVICE_CATALOG.find((device) => device.id === id) || null;
+}
+
+function persistDevice(deviceId) {
+  state.deviceId = deviceId;
+  state.device = deviceById(deviceId);
+  sessionStorage.setItem(DEVICE_STORAGE_KEY, deviceId);
+  localStorage.setItem(DEVICE_STORAGE_KEY, deviceId);
+  localStorage.removeItem("waste_tablet_assignee");
+}
+
 // --------------------------------------------------------------------------
 // 기기 배정 설정
 // --------------------------------------------------------------------------
@@ -136,39 +179,18 @@ async function setupDeviceConfig() {
   const icon = $("#assignee-icon");
 
   function updateHeaderBadge() {
-    if (!state.assignee || state.assignee === "__ALL__") {
-      display.textContent = "전체 배정 건 (공용/순회)";
-      icon.textContent = "🌐";
-    } else {
-      display.textContent = state.assignee;
+    const device = state.device || deviceById(state.deviceId);
+    if (!device) {
+      display.textContent = "태블릿 미지정";
       icon.textContent = "🚜";
+      return;
     }
+    display.textContent = device.role === "spare" ? "예비 태블릿" : `${device.name}${device.zone ? ` · ${device.zone}` : ""}`;
+    icon.textContent = device.role === "spare" ? "🛠️" : "🚜";
   }
 
-  // 서버에서 등록된 담당자 목록 가져와 프리셋 확장
-  try {
-    const res = await fetch("/api/staff-assignees");
-    if (res.ok) {
-      const data = await res.json();
-      if (Array.isArray(data.assignees) && data.assignees.length) {
-        const grid = $("#assignee-preset-grid");
-        const currentOpts = Array.from(grid.querySelectorAll('input[type="radio"]')).map((r) => r.value);
-        data.assignees.forEach((assignee) => {
-          if (!currentOpts.includes(assignee) && assignee !== "__ALL__") {
-            const label = document.createElement("label");
-            label.className = "modal-chip-radio";
-            label.innerHTML = `<input type="radio" name="device-assignee-opt" value="${escapeHtml(assignee)}" /><span>🚜 ${escapeHtml(assignee)}</span>`;
-            grid.insertBefore(label, grid.lastElementChild);
-          }
-        });
-      }
-    }
-  } catch {
-    // 기본 프리셋 사용
-  }
-
-  // 처음 접속 시 담당자가 없으면 모달 자동 오픈
-  if (!state.assignee) {
+  state.device = deviceById(state.deviceId);
+  if (!state.deviceId || !state.device) {
     if (modal.showModal) modal.showModal();
     else modal.setAttribute("open", "");
   } else {
@@ -176,18 +198,10 @@ async function setupDeviceConfig() {
   }
 
   $("#btn-device-setting").addEventListener("click", () => {
-    // 기존 선택 라디오 매칭
-    const radios = $$('input[name="device-assignee-opt"]');
-    let matched = false;
-    radios.forEach((r) => {
-      if (r.value === state.assignee) {
-        r.checked = true;
-        matched = true;
-      }
+    $$('input[name="device-assignee-opt"]').forEach((radio) => {
+      radio.checked = radio.value === state.deviceId;
     });
-    if (!matched && state.assignee) {
-      $("#custom-assignee-input").value = state.assignee;
-    }
+    $("#device-pin-input").value = "";
     if (modal.showModal) modal.showModal();
     else modal.setAttribute("open", "");
   });
@@ -195,21 +209,30 @@ async function setupDeviceConfig() {
   $("#btn-close-device-modal").addEventListener("click", () => modal.close());
   $("#btn-cancel-device-modal").addEventListener("click", () => modal.close());
 
-  $("#btn-save-device-modal").addEventListener("click", () => {
-    const custom = $("#custom-assignee-input").value.trim();
-    let selected = custom;
-    if (!selected) {
-      const checked = $('input[name="device-assignee-opt"]:checked');
-      if (checked) selected = checked.value;
+  $("#btn-save-device-modal").addEventListener("click", async () => {
+    const checked = $('input[name="device-assignee-opt"]:checked');
+    const selected = checked?.value || "";
+    if (!selected || selected === "__ALL__" || !deviceById(selected)) {
+      return showToast("1호차·2호차·예비 중 하나를 선택해 주세요.", "warn");
     }
-    if (!selected) selected = "__ALL__";
-
-    state.assignee = selected;
-    localStorage.setItem("waste_tablet_assignee", selected);
-    updateHeaderBadge();
-    modal.close();
-    showToast(`태블릿 담당자가 [${selected === "__ALL__" ? "전체 건" : selected}]으로 설정되었습니다.`);
-    loadTasks();
+    const pin = $("#device-pin-input").value.trim();
+    try {
+      const res = await fetch("/api/fleet/bind", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ deviceId: selected, pin })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "기기 등록에 실패했습니다.");
+      persistDevice(selected);
+      updateHeaderBadge();
+      modal.close();
+      showToast(`${state.device.name} 태블릿으로 연결했습니다.`);
+      startRealtime();
+      await loadTasks();
+    } catch (error) {
+      showToast(error.message || "PIN을 확인해 주세요.", "warn");
+    }
   });
 }
 
@@ -218,16 +241,18 @@ async function setupDeviceConfig() {
 // --------------------------------------------------------------------------
 async function loadTasks({ quiet = false } = {}) {
   const syncLabel = $("#sync-time-display");
+  if (!state.deviceId) {
+    state.tasks = [];
+    if (syncLabel) syncLabel.textContent = "기기 미지정";
+    updateProgressAndMetrics();
+    renderSidebarList();
+    renderMainStage(null);
+    return;
+  }
   if (!quiet) syncLabel.textContent = "동기화 중…";
 
   try {
-    let url = "/api/reports";
-    const params = [];
-    if (state.assignee && state.assignee !== "__ALL__") {
-      params.push(`assignee=${encodeURIComponent(state.assignee)}`);
-    }
-    if (params.length) url += `?${params.join("&")}`;
-
+    const url = `/api/reports?deviceId=${encodeURIComponent(state.deviceId)}`;
     const res = await fetch(url);
     if (!res.ok) throw new Error();
     const data = await res.json();
@@ -283,7 +308,8 @@ function getFilteredAndSortedTasks() {
   // 2) 거리 계산 붙이기
   list.forEach((t) => {
     if (state.userCoords && Number.isFinite(t.latitude) && Number.isFinite(t.longitude)) {
-      t._distance = calculateDistanceMeters(state.userCoords.latitude, state.userCoords.longitude, t.latitude, t.longitude);
+      const meters = calculateDistanceMeters(state.userCoords.latitude, state.userCoords.longitude, t.latitude, t.longitude);
+      t._distance = meters != null && meters <= 20000 ? meters : null;
     } else {
       t._distance = null;
     }
@@ -346,7 +372,7 @@ function renderSidebarList() {
       <article class="task-card ${isActive ? "active" : ""} ${isCollected ? "status-collected" : ""}" data-no="${escapeHtml(task.report_no)}">
         <div class="card-top">
           <span class="card-seq">#${idx + 1} · ${escapeHtml(task.report_no.slice(-6))}</span>
-          <span class="card-status-badge ${statusClass[task.status] || "badge-assigned"}">${statusLabel[task.status] || task.status}</span>
+          <span class="card-status-badge ${statusClass[task.status] || "badge-assigned"}">${statusLabel[task.status] || task.status}${task.channel === "PHONE" ? " · 전화" : ""}</span>
         </div>
         <div class="card-address">${escapeHtml(task.address)}</div>
         <div class="card-detail-loc">📍 ${escapeHtml(task.address_detail)}</div>
@@ -364,6 +390,7 @@ function renderSidebarList() {
       state.selectedReportNo = reportNo;
       renderSidebarList();
       const report = state.tasks.find((t) => t.report_no === reportNo);
+      lastLocatedReportNo = null;
       renderMainStage(report);
     });
   });
@@ -372,7 +399,8 @@ function renderSidebarList() {
 // --------------------------------------------------------------------------
 // 우측 메인 스테이지 렌더링
 // --------------------------------------------------------------------------
-function renderMainStage(report) {
+let lastLocatedReportNo = null;
+function renderMainStage(report, { skipLocation = false } = {}) {
   const emptyView = $("#stage-empty-view");
   const contentView = $("#stage-content-view");
 
@@ -384,14 +412,22 @@ function renderMainStage(report) {
 
   emptyView.hidden = true;
   contentView.hidden = false;
+  if (!skipLocation && report.report_no !== lastLocatedReportNo) {
+    lastLocatedReportNo = report.report_no;
+    requestJobLocation();
+  }
 
   // 1) 배너 정보
   $("#stage-report-no").textContent = report.report_no;
-  $("#stage-payment-badge").textContent = report.payment_status === "COMPLETED" ? "결제완료" : (report.payment_status === "PENDING_CASH_RECEIPT" ? "현금수납대기" : "결제대기");
+  $("#stage-payment-badge").textContent = report.channel === "PHONE"
+    ? (report.payment_status === "COMPLETED" ? "전화접수 · 결제완료" : "전화접수")
+    : (report.payment_status === "COMPLETED" ? "결제완료" : (report.payment_status === "PENDING_CASH_RECEIPT" ? "현금수납대기" : "결제대기"));
   $("#stage-payment-badge").className = `card-status-badge ${report.payment_status === "COMPLETED" ? "badge-collected" : "badge-change"}`;
   $("#stage-zone-badge").textContent = report.zone ? `구역: ${report.zone}` : "구역 미지정";
   $("#stage-address").textContent = report.address;
-  $("#stage-address-detail").textContent = `📍 배출위치: ${report.address_detail}`;
+  $("#stage-address-detail").textContent = report.citizen_name
+    ? `📍 배출위치: ${report.address_detail} · 신고자 ${report.citizen_name}`
+    : `📍 배출위치: ${report.address_detail}`;
 
   // 2) 카카오맵 길찾기 버튼
   const navBtn = $("#btn-navigate-kakao");
@@ -411,7 +447,8 @@ function renderMainStage(report) {
   const distTag = $("#stage-dist-tag");
   let dist = null;
   if (state.userCoords && Number.isFinite(report.latitude) && Number.isFinite(report.longitude)) {
-    dist = calculateDistanceMeters(state.userCoords.latitude, state.userCoords.longitude, report.latitude, report.longitude);
+    const meters = calculateDistanceMeters(state.userCoords.latitude, state.userCoords.longitude, report.latitude, report.longitude);
+    dist = meters != null && meters <= 20000 ? meters : null;
   }
   if (dist !== null) {
     if (dist <= 60) {
@@ -422,7 +459,7 @@ function renderMainStage(report) {
       distTag.className = "map-dist-tag";
     }
   } else {
-    distTag.textContent = report.latitude ? "현재 위치 확인 중…" : "신고 좌표 없음";
+    distTag.textContent = report.latitude ? "신고 위치" : "신고 좌표 없음";
     distTag.className = "map-dist-tag";
   }
 
@@ -697,35 +734,67 @@ function setupChangeAction() {
 }
 
 // --------------------------------------------------------------------------
-// 위치 추적 (태블릿 GPS)
+// 위치는 작업 건을 열거나 처리할 때만 확인 (상시 추적 없음)
 // --------------------------------------------------------------------------
+function requestJobLocation() {
+  if (!navigator.geolocation || !state.selectedReportNo) return;
+  navigator.geolocation.getCurrentPosition(
+    ({ coords }) => {
+      state.userCoords = {
+        latitude: coords.latitude,
+        longitude: coords.longitude,
+        accuracy: coords.accuracy
+      };
+      const current = state.tasks.find((t) => t.report_no === state.selectedReportNo);
+      if (current) {
+        renderMainStage(current, { skipLocation: true });
+        renderSidebarList();
+      }
+    },
+    () => {},
+    { enableHighAccuracy: true, timeout: 8000, maximumAge: 20000 }
+  );
+}
+
 function setupGeolocation() {
-  if (!navigator.geolocation) return;
+  // 상시 watchPosition/페이지 진입 GPS는 쓰지 않습니다.
+}
 
-  function onPosSuccess({ coords }) {
-    state.userCoords = {
-      latitude: coords.latitude,
-      longitude: coords.longitude,
-      accuracy: coords.accuracy
-    };
-    // 현재 선택된 건의 거리 갱신
-    const current = state.tasks.find((t) => t.report_no === state.selectedReportNo);
-    if (current) {
-      renderMainStage(current);
-    }
+async function sendHeartbeat() {
+  if (!state.deviceId) return;
+  try {
+    await fetch("/api/fleet/heartbeat", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        deviceId: state.deviceId,
+        activeReportNo: state.selectedReportNo
+      })
+    });
+  } catch {
+    /* 오프라인 허용 */
   }
+}
 
-  // 초기 1회
-  navigator.geolocation.getCurrentPosition(onPosSuccess, () => {}, {
-    enableHighAccuracy: true,
-    timeout: 10000,
-    maximumAge: 0
-  });
-
-  // 실시간 이동 추적
-  navigator.geolocation.watchPosition(onPosSuccess, () => {}, {
-    enableHighAccuracy: true,
-    maximumAge: 5000
+let fleetLive = null;
+function startRealtime() {
+  if (fleetLive) fleetLive.stop();
+  fleetLive = null;
+  if (!state.deviceId) return;
+  sendHeartbeat();
+  fleetLive = connectFleetSync({
+    deviceId: state.deviceId,
+    pollMs: 3000,
+    onEvent(event) {
+      if (event?.type === "assigned" || event?.type === "takeover") {
+        showToast("새 수거 건이 이 태블릿으로 들어왔습니다.");
+        speak("새 수거 건이 배정되었습니다.");
+      }
+      loadTasks({ quiet: true });
+    },
+    onSnapshot() {
+      loadTasks({ quiet: true });
+    }
   });
 }
 
@@ -807,10 +876,13 @@ async function init() {
   setupUncollectedAction();
   setupChangeAction();
   setupGeolocation();
-  await loadTasks();
-
-  // 30초 자동 동기화
-  setInterval(() => loadTasks({ quiet: true }), 30000);
+  if (state.deviceId) {
+    startRealtime();
+    await loadTasks();
+  }
+  setInterval(() => {
+    if (state.deviceId) sendHeartbeat();
+  }, 8000);
 }
 
 init();

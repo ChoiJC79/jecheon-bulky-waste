@@ -1,3 +1,17 @@
+import {
+  CLUSTER_RADIUS_METERS,
+  CLUSTER_RULE_TEXT,
+  buildNearbyClusters,
+  calculateDistanceMeters,
+  formatClusterDistance,
+  suggestClusterAssignment
+} from "./nearby-clusters.js";
+import { setupOfficeIntake, refreshOfficeIntake, applyFleetSnapshot } from "./office-intake.js";
+import { connectFleetSync, formatLastSeen } from "./fleet-sync.js";
+import { barPercent, buildIntakeStats } from "./intake-stats.js";
+
+const capturePhoto = (...args) => globalThis.capturePhoto(...args);
+
 const STATUS_LABEL = {
   RECEIVED: "미배정",
   ASSIGNED: "배정완료",
@@ -27,6 +41,8 @@ const state = {
   zones: ["청전·의림", "중앙·교동", "하소·영천"],
   filters: { q: "", status: "", payment: "", zone: "" },
   selected: null,
+  selectedCluster: null,
+  clusters: [],
   fieldQueue: [],
   fieldIndex: 0,
   fieldReport: null,
@@ -35,6 +51,7 @@ const state = {
 const JECHEON_CENTER = [37.1326, 128.1910];
 let staffMap;
 let reportLayer;
+let clusterLayer;
 let fieldTaskMap;
 let fieldReportMarker;
 let fieldUserMarker;
@@ -55,20 +72,91 @@ function getFiltered() {
 }
 
 function renderMetrics(all) {
-  const todayStr = new Date().toISOString().slice(0, 10);
-  const today = all.filter((report) => report.created_at.slice(0, 10) === todayStr).length;
-  const unassigned = all.filter((report) => report.status === "RECEIVED").length;
-  const pendingCash = all.filter((report) => report.payment_status === "PENDING_CASH_RECEIPT").length;
-  const assigned = all.filter((report) => report.status === "ASSIGNED").length;
-  const attentionCount = all.filter((report) => ["UNCOLLECTED", "CHANGE_REQUESTED", "SUPPLEMENT_REQUESTED"].includes(report.status)).length;
+  const stats = buildIntakeStats(all);
   const cards = [
-    ["오늘 접수", today, `전체 ${all.length}건 중`, false],
-    ["현금수납대기", pendingCash, pendingCash ? "지정 수납처 수납 확인이 필요합니다." : "대기 건이 없습니다.", pendingCash > 0],
-    ["미배정", unassigned, "수거구역 배정이 필요합니다.", unassigned > 0],
-    ["배정완료", assigned, "수거 예정으로 전달되었습니다.", false],
-    ["확인 필요", attentionCount, attentionCount ? "미수거·현장변경 건 확인이 필요합니다." : "확인 건이 없습니다.", attentionCount > 0]
+    ["오늘 접수", stats.todayCount, `전화 ${stats.todayPhoneCount}건 · 전체 ${stats.totalCount}건`, false],
+    ["입금·수납대기", stats.pendingPaymentCount, stats.pendingPaymentCount ? `${won.format(stats.pendingPaymentFee)}원 확인이 필요합니다.` : "대기 건이 없습니다.", stats.pendingPaymentCount > 0],
+    ["미배정", stats.unassignedCount, "수거구역·태블릿 배정이 필요합니다.", stats.unassignedCount > 0],
+    ["배정완료", stats.assignedCount, "1호차·2호차·예비로 전달되었습니다.", false],
+    ["미수거·변경", stats.fieldIssueCount, stats.fieldIssueCount ? "현장에서 돌아온 건을 확인해 주세요." : "확인 건이 없습니다.", stats.fieldIssueCount > 0]
   ];
-  $("#metric-grid").innerHTML = cards.map(([label, value, note, attention]) => `<article class="${attention ? "attention" : ""}"><small>${label}</small><strong>${value}</strong><span>${escapeHtml(note)}</span></article>`).join("");
+  const grid = $("#metric-grid");
+  if (grid) grid.innerHTML = cards.map(([label, value, note, attention]) => `<article class="${attention ? "attention" : ""}"><small>${label}</small><strong>${value}</strong><span>${escapeHtml(note)}</span></article>`).join("");
+  renderIntakeStats(all, stats);
+}
+
+function renderStatBars(selector, rows, { empty = "아직 집계할 접수가 없습니다." } = {}) {
+  const node = $(selector);
+  if (!node) return;
+  const max = Math.max(0, ...rows.map((row) => row.count || 0));
+  if (!rows.length) {
+    node.innerHTML = `<p class="intake-empty">${empty}</p>`;
+    return;
+  }
+  node.innerHTML = rows.map((row) => {
+    const label = row.label || row.name || row.key;
+    const count = row.count ?? row.quantity ?? 0;
+    const width = barPercent(count, max);
+    const fee = Number.isFinite(row.fee) ? `<small>${won.format(row.fee)}원</small>` : "";
+    return `<div class="stat-bar-row"><span>${escapeHtml(label)}</span><span class="stat-bar-track" aria-hidden="true"><i style="width:${width}%"></i></span><b>${count}${fee}</b></div>`;
+  }).join("");
+}
+
+function renderIntakeStats(all, prepared) {
+  const stats = prepared || buildIntakeStats(all);
+  const strip = $("#intake-stats-strip");
+  if (strip) {
+    const cells = [
+      ["오늘 전화접수", stats.todayPhoneCount, `${won.format(stats.feeToday)}원`],
+      ["입금 대기", stats.pendingPaymentCount, stats.pendingPaymentCount ? `${won.format(stats.pendingPaymentFee)}원` : "대기 없음"],
+      ["미배정", stats.unassignedCount, "태블릿 전송 전"],
+      ["현장 수거 중", stats.assignedCount, "1·2호차·예비"],
+      ["미수거·변경", stats.fieldIssueCount, stats.fieldIssueCount ? "확인 필요" : "없음"]
+    ];
+    strip.innerHTML = cells.map(([label, value, note]) => `<article class="${Number(value) > 0 && (label === "입금 대기" || label === "미수거·변경" || label === "미배정") ? "attention" : ""}"><small>${label}</small><strong>${value}</strong><span>${escapeHtml(note)}</span></article>`).join("");
+  }
+
+  const metric = $("#stats-metric-grid");
+  if (metric) {
+    const cards = [
+      ["전체 접수", stats.totalCount, `전화 ${stats.phoneCount}건`],
+      ["오늘 접수", stats.todayCount, `${won.format(stats.feeToday)}원`],
+      ["수수료 합계", `${won.format(stats.feeTotal)}원`, `수거완료 ${won.format(stats.collectedFee)}원`],
+      ["입금 완료", stats.paidCount, `대기 ${stats.pendingPaymentCount}건`],
+      ["미수거", stats.uncollectedCount, "현장 미수거"],
+      ["변경요청", stats.changeRequestedCount, "접수처 확인"]
+    ];
+    metric.innerHTML = cards.map(([label, value, note]) => `<article><small>${label}</small><strong>${value}</strong><span>${escapeHtml(note)}</span></article>`).join("");
+  }
+
+  const pipeline = $("#stats-pipeline");
+  if (pipeline) {
+    const steps = [
+      ["입금 대기", stats.pipeline.waitingDeposit],
+      ["전송 대기", stats.pipeline.waitingDispatch],
+      ["현장 수거", stats.pipeline.inField],
+      ["수거완료", stats.pipeline.done]
+    ];
+    pipeline.innerHTML = steps.map(([label, value], index) => `<div><small>${index + 1}. ${label}</small><strong>${value}</strong></div>`).join("");
+  }
+
+  const status = $("#stats-status");
+  if (status) status.textContent = `방금 집계 · ${stats.totalCount}건`;
+
+  renderStatBars("#stats-by-status", stats.byStatus);
+  renderStatBars("#stats-by-payment", stats.byPayment);
+  renderStatBars("#stats-by-zone", stats.byZone);
+  renderStatBars("#stats-by-tablet", stats.byTablet.map((row) => ({ ...row, count: row.count, fee: row.fee })));
+  renderStatBars("#stats-by-item", stats.byItem.map((row) => ({ ...row, count: row.quantity, label: row.name })), { empty: "품목 집계가 없습니다." });
+
+  const days = $("#stats-by-day");
+  if (days) {
+    const max = Math.max(0, ...stats.byDay.map((row) => row.count));
+    days.innerHTML = stats.byDay.map((row) => {
+      const height = row.count ? Math.max(10, barPercent(row.count, max)) : 4;
+      return `<div class="stat-day-col"><span class="stat-day-bar" style="height:${height}%"></span><b>${row.count}</b><small>${escapeHtml(row.day.slice(5).replace("-", "/"))}</small></div>`;
+    }).join("");
+  }
 }
 
 function renderZoneCounts(all) {
@@ -85,23 +173,61 @@ function setupStaffMap() {
   staffMap = L.map("staff-map", { zoomControl: false }).setView(JECHEON_CENTER, 13);
   L.control.zoom({ position: "bottomright" }).addTo(staffMap);
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "&copy; OpenStreetMap contributors" }).addTo(staffMap);
+  clusterLayer = L.layerGroup().addTo(staffMap);
   reportLayer = L.layerGroup().addTo(staffMap);
+}
+
+function getSelectedCluster() {
+  return state.clusters.find((cluster) => cluster.id === state.selectedCluster) || null;
+}
+
+function clusterMemberNos(cluster = getSelectedCluster()) {
+  return new Set((cluster?.members || []).map((report) => report.report_no));
 }
 
 function renderReportMap() {
   if (!reportLayer) return;
   reportLayer.clearLayers();
+  if (clusterLayer) clusterLayer.clearLayers();
+  const selectedCluster = getSelectedCluster();
+  const memberNos = clusterMemberNos(selectedCluster);
   const visible = getFiltered().filter((report) => Number.isFinite(report.latitude) && Number.isFinite(report.longitude));
+  const visibleNos = new Set(visible.map((report) => report.report_no));
+
+  if (selectedCluster && clusterLayer) {
+    const radius = Math.max(80, selectedCluster.maxDistanceMeters / 2 + 40);
+    L.circle([selectedCluster.centroid.latitude, selectedCluster.centroid.longitude], {
+      radius,
+      color: "#c2410c",
+      weight: 1,
+      dashArray: "4 4",
+      fillColor: "#fb923c",
+      fillOpacity: 0.12
+    }).addTo(clusterLayer);
+    selectedCluster.members.forEach((report) => {
+      if (visibleNos.has(report.report_no) || !Number.isFinite(report.latitude)) return;
+      L.circleMarker([report.latitude, report.longitude], {
+        radius: 8,
+        color: "#c2410c",
+        weight: 3,
+        fillColor: "#ff5a36",
+        fillOpacity: 0.85
+      }).addTo(clusterLayer).bindTooltip(`${escapeHtml(report.report_no)} · ${escapeHtml(report.address)}`, { direction: "top", offset: [0, -7] })
+        .on("click", () => selectReport(report.report_no, { keepCluster: true }));
+    });
+  }
+
   visible.forEach((report) => {
+    const inCluster = memberNos.has(report.report_no);
     const marker = L.circleMarker([report.latitude, report.longitude], {
-      radius: report.report_no === state.selected ? 10 : 7,
-      color: "#ffffff",
-      weight: 2,
+      radius: report.report_no === state.selected ? 10 : inCluster ? 9 : 7,
+      color: inCluster ? "#c2410c" : "#ffffff",
+      weight: inCluster ? 3 : 2,
       fillColor: report.status === "RECEIVED" ? "#ff5a36" : "#2c7a4b",
       fillOpacity: 1
     }).addTo(reportLayer);
     marker.bindTooltip(`${escapeHtml(report.report_no)} · ${escapeHtml(report.address)}`, { direction: "top", offset: [0, -7] });
-    marker.on("click", () => { state.selected = report.report_no; renderList(); renderDetail(); renderReportMap(); });
+    marker.on("click", () => selectReport(report.report_no, { keepCluster: inCluster }));
   });
 }
 
@@ -115,25 +241,173 @@ function renderList() {
     const itemSummary = report.items.map((item) => item.name).join(" · ") || "품목 정보 없음";
     const badgeClass = report.status === "RECEIVED" ? "badge-warn" : report.status === "ASSIGNED" ? "badge-ok" : "badge-alert";
     const isPendingCash = report.payment_status === "PENDING_CASH_RECEIPT";
+    const isPendingTransfer = report.payment_status === "PENDING_TRANSFER";
     const paymentBadge = isPendingCash
       ? `<span class="badge-tag badge-cash">💵 현금수납대기</span>`
-      : `<span class="badge-tag badge-pay-ok">${report.payment_method === "cash" ? "현금완료" : "결제완료"}</span>`;
-    return `<button class="request-row ${report.report_no === state.selected ? "active" : ""}" type="button" data-report="${report.report_no}">
+      : isPendingTransfer
+        ? `<span class="badge-tag badge-cash">자동이체 대기</span>`
+        : `<span class="badge-tag badge-pay-ok">${report.payment_method === "cash" ? "현금완료" : "결제완료"}</span>`;
+    const channelBadge = report.channel === "PHONE" ? `<span class="badge-tag badge-phone">전화접수</span>` : "";
+    const inCluster = clusterMemberNos().has(report.report_no);
+    return `<button class="request-row ${report.report_no === state.selected ? "active" : ""} ${inCluster ? "in-cluster" : ""}" type="button" data-report="${report.report_no}">
       <span>
         <strong>${escapeHtml(report.address)}</strong>
         <small>${escapeHtml(itemSummary)} · ${won.format(report.total_fee)}원</small>
-        <span class="request-badges">${paymentBadge}</span>
+        <span class="request-badges">${channelBadge}${paymentBadge}</span>
       </span>
       <i class="${badgeClass}">${STATUS_LABEL[report.status] || report.status}</i>
       <b>›</b>
     </button>`;
   }).join("");
-  document.querySelectorAll("[data-report]").forEach((button) => button.addEventListener("click", () => { state.selected = button.dataset.report; renderList(); renderDetail(); renderReportMap(); focusSelectedReport(); }));
+  $("#request-list").querySelectorAll("[data-report]").forEach((button) => button.addEventListener("click", () => selectReport(button.dataset.report)));
+}
+
+function selectReport(reportNo, { keepCluster = false, focusMap = true } = {}) {
+  state.selected = reportNo;
+  if (!keepCluster) {
+    const stillInCluster = clusterMemberNos().has(reportNo);
+    if (!stillInCluster) state.selectedCluster = null;
+  }
+  renderClusters();
+  renderList();
+  renderDetail();
+  renderReportMap();
+  if (focusMap) focusSelectedReport();
 }
 
 function focusSelectedReport() {
   const report = state.allReports.find((candidate) => candidate.report_no === state.selected);
   if (staffMap && report && Number.isFinite(report.latitude) && Number.isFinite(report.longitude)) staffMap.setView([report.latitude, report.longitude], 16, { animate: true });
+}
+
+function focusClusterOnMap(cluster) {
+  if (!staffMap || !cluster?.members?.length) return;
+  const points = cluster.members.filter((report) => Number.isFinite(report.latitude) && Number.isFinite(report.longitude)).map((report) => [report.latitude, report.longitude]);
+  if (points.length >= 2) staffMap.fitBounds(points, { padding: [36, 36], maxZoom: 16, animate: true });
+  else if (points.length === 1) staffMap.setView(points[0], 16, { animate: true });
+}
+
+function refreshClusters({ keepSelection = true } = {}) {
+  const previous = keepSelection ? state.selectedCluster : null;
+  state.clusters = buildNearbyClusters(state.allReports);
+  if (previous && state.clusters.some((cluster) => cluster.id === previous)) state.selectedCluster = previous;
+  else if (previous) state.selectedCluster = null;
+  renderClusters();
+}
+
+function renderClusters() {
+  const list = $("#cluster-list");
+  const status = $("#cluster-status");
+  const count = $("#cluster-count");
+  const rule = $("#cluster-rule");
+  if (!list || !status) return;
+  if (rule) rule.textContent = CLUSTER_RULE_TEXT;
+  const clusters = state.clusters;
+  count.textContent = clusters.length ? `${clusters.length}개 묶음` : "추천 없음";
+  if (!clusters.length) {
+    status.textContent = `지금은 가까운 미배정 묶음이 없습니다. 좌표가 있는 미배정 건이 ${CLUSTER_RADIUS_METERS}m 이내에 2건 이상 모이면 여기에 추천됩니다.`;
+    list.innerHTML = "";
+    return;
+  }
+  status.textContent = "";
+  list.innerHTML = clusters.map((cluster) => {
+    const selected = cluster.id === state.selectedCluster;
+    const title = `${escapeHtml(cluster.members[0].address)} 외 ${cluster.members.length - 1}곳`;
+    const suggestion = suggestClusterAssignment(cluster, state.zones);
+    const membersHtml = selected ? `<ul class="cluster-members">${cluster.members.map((report) => {
+      const itemSummary = (report.items || []).map((item) => item.name).join(" · ") || "품목 정보 없음";
+      return `<li><button type="button" class="${report.report_no === state.selected ? "active" : ""}" data-cluster-member="${escapeHtml(report.report_no)}">
+        <span><strong>${escapeHtml(report.address)}</strong><small>${escapeHtml(report.report_no)} · ${escapeHtml(itemSummary)} · ${won.format(report.total_fee)}원</small></span>
+        <i class="badge-warn">${STATUS_LABEL[report.status] || report.status}</i>
+      </button></li>`;
+    }).join("")}</ul>` : "";
+    const contextHtml = selected && cluster.nearbyAssigned.length
+      ? `<p class="cluster-context">인근 배정 건 ${cluster.nearbyAssigned.length}건 (참고): ${cluster.nearbyAssigned.map((report) => `${escapeHtml(report.report_no)} ${escapeHtml(report.assignee || report.zone || "")}`).join(" · ")}</p>`
+      : "";
+    const assignHtml = selected ? `<div class="cluster-assign">
+      <label>수거구역<select data-cluster-zone>${state.zones.map((zone) => `<option value="${escapeHtml(zone)}" ${suggestion.zone === zone ? "selected" : ""}>${escapeHtml(zone)}</option>`).join("")}</select></label>
+      <label>수거 담당자<input data-cluster-assignee type="text" placeholder="담당자명 (선택)" value="${escapeHtml(suggestion.assignee)}" /></label>
+      <button class="button secondary" type="button" data-cluster-assign="${escapeHtml(cluster.id)}">이 묶음 함께 배정</button>
+    </div>
+    <p class="cluster-message" data-cluster-message></p>` : "";
+    return `<article class="cluster-card ${selected ? "active" : ""}" data-cluster-id="${escapeHtml(cluster.id)}">
+      <button class="cluster-card-head" type="button" data-cluster-toggle="${escapeHtml(cluster.id)}">
+        <span><strong>${title}</strong><small>미배정 ${cluster.receivedCount}건 · ${won.format(cluster.totalFee)}원</small></span>
+        <span class="cluster-span">최대 간격 ${formatClusterDistance(cluster.maxDistanceMeters)}</span>
+      </button>
+      ${membersHtml}${contextHtml}${assignHtml}
+    </article>`;
+  }).join("");
+
+  list.querySelectorAll("[data-cluster-toggle]").forEach((button) => button.addEventListener("click", () => {
+    const clusterId = button.dataset.clusterToggle;
+    inspectCluster(clusterId, { toggle: true });
+  }));
+  list.querySelectorAll("[data-cluster-member]").forEach((button) => button.addEventListener("click", (event) => {
+    event.stopPropagation();
+    selectReport(button.dataset.clusterMember, { keepCluster: true });
+  }));
+  list.querySelectorAll("[data-cluster-assign]").forEach((button) => button.addEventListener("click", () => {
+    assignClusterTogether(button.closest("[data-cluster-id]"));
+  }));
+}
+
+function inspectCluster(clusterId, { toggle = false } = {}) {
+  const cluster = state.clusters.find((item) => item.id === clusterId);
+  if (!cluster) return;
+  if (toggle && state.selectedCluster === clusterId) {
+    state.selectedCluster = null;
+    renderClusters();
+    renderList();
+    renderReportMap();
+    return;
+  }
+  state.selectedCluster = clusterId;
+  state.selected = cluster.members[0].report_no;
+  renderClusters();
+  renderList();
+  renderDetail();
+  renderReportMap();
+  focusClusterOnMap(cluster);
+}
+
+async function assignClusterTogether(card) {
+  const clusterId = card?.dataset?.clusterId;
+  const cluster = state.clusters.find((item) => item.id === clusterId);
+  const message = card?.querySelector("[data-cluster-message]");
+  const zone = card?.querySelector("[data-cluster-zone]")?.value;
+  const assignee = card?.querySelector("[data-cluster-assignee]")?.value || "";
+  if (!cluster || !message) return;
+  const targets = cluster.members.filter((report) => report.status === "RECEIVED");
+  if (!targets.length) {
+    message.textContent = "함께 배정할 미배정 건이 없습니다.";
+    return;
+  }
+  const pendingPay = targets.filter((report) => report.payment_status === "PENDING_CASH_RECEIPT" || report.payment_status === "PENDING_TRANSFER");
+  if (pendingPay.length && !confirm(`⚠️ 이 묶음에 입금·수납이 확인되지 않은 건이 ${pendingPay.length}건 있습니다.\n확인 전에 같은 구역으로 함께 배정하시겠습니까?`)) {
+    return;
+  }
+  message.textContent = `${targets.length}건을 함께 배정하고 있습니다…`;
+  document.querySelectorAll("[data-cluster-assign], .assignment button, .reason-actions button").forEach((button) => { button.disabled = true; });
+  try {
+    for (const report of targets) {
+      const response = await fetch(`/api/reports/${encodeURIComponent(report.report_no)}/status`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "assign", zone, assignee })
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || `${report.report_no} 배정에 실패했습니다.`);
+    }
+    state.selectedCluster = null;
+    state.selected = targets[0].report_no;
+    await loadReports({ keepDetail: true });
+    renderDetail();
+    $("#list-status").textContent = `가까운 ${targets.length}건을 같은 구역으로 함께 배정했습니다.`;
+  } catch (error) {
+    message.textContent = error.message;
+    document.querySelectorAll("[data-cluster-assign], .assignment button, .reason-actions button").forEach((button) => { button.disabled = false; });
+  }
 }
 
 function renderDetail() {
@@ -143,6 +417,7 @@ function renderDetail() {
   const itemsHtml = report.items.length ? report.items.map((item) => `<li><span>${escapeHtml(item.name)} · ${escapeHtml(item.option_name)}</span><b>${item.quantity}개 · ${won.format(item.unit_fee * item.quantity)}원</b></li>`).join("") : "<li>등록된 품목이 없습니다.</li>";
   const location = report.latitude != null && report.longitude != null ? `${report.latitude.toFixed(5)}, ${report.longitude.toFixed(5)}` : "좌표 미확인";
   const isPendingCash = report.payment_status === "PENDING_CASH_RECEIPT";
+  const isPendingTransfer = report.payment_status === "PENDING_TRANSFER";
 
   const cashConfirmBlock = isPendingCash ? `
     <div class="cash-confirm-panel">
@@ -152,9 +427,18 @@ function renderDetail() {
       </div>
       <button class="button primary" type="button" id="confirm-payment-btn">현금 수납 확인 (결제완료 처리)</button>
     </div>` : "";
+  const transferConfirmBlock = isPendingTransfer ? `
+    <div class="cash-confirm-panel">
+      <div class="cash-confirm-info">
+        <strong>자동이체 입금 확인 대기 (수수료: ${won.format(report.total_fee)}원)</strong>
+        <p>시범 화면입니다. 실제 PG 조회 없이, 통장·이체내역에서 입금이 확인되면 아래 버튼으로 처리하세요. 계좌 비밀번호는 받지 않습니다.</p>
+      </div>
+      <button class="button primary" type="button" id="confirm-transfer-btn">자동이체 입금 확인</button>
+    </div>` : "";
 
   const actions = report.status === "REJECTED" || report.status === "COLLECTED" ? "" : `
     ${cashConfirmBlock}
+    ${transferConfirmBlock}
     <div class="assignment">
       <label>수거구역<select id="assign-zone">${state.zones.map((zone) => `<option value="${escapeHtml(zone)}" ${report.zone === zone ? "selected" : ""}>${escapeHtml(zone)}</option>`).join("")}</select></label>
       <label>수거 담당자<input id="assign-name" type="text" placeholder="담당자명 (선택)" value="${report.assignee ? escapeHtml(report.assignee) : ""}" /></label>
@@ -173,8 +457,10 @@ function renderDetail() {
     </div>
     <div class="detail-data">
       <span><b>결제수단</b>${PAYMENT_METHOD_LABEL[report.payment_method] || report.payment_method || "기타"}</span>
-      <span><b>결제상태</b><i class="badge-tag ${isPendingCash ? 'badge-cash' : 'badge-pay-ok'}">${PAYMENT_LABEL[report.payment_status] || report.payment_status}</i></span>
+      <span><b>결제상태</b><i class="badge-tag ${isPendingCash || isPendingTransfer ? 'badge-cash' : 'badge-pay-ok'}">${PAYMENT_LABEL[report.payment_status] || report.payment_status}</i></span>
       <span><b>총 수수료</b>${won.format(report.total_fee)}원</span>
+      <span><b>접수 경로</b>${report.channel === "PHONE" ? "전화 접수 (사무실)" : "시민 웹"}</span>
+      <span><b>신고자</b>${report.citizen_name ? `${escapeHtml(report.citizen_name)} · ${escapeHtml(report.citizen_phone || "")}` : "미입력"}</span>
       <span><b>위치 좌표</b>${location}</span>
       <span><b>접수일시</b>${new Date(report.created_at).toLocaleString("ko-KR")}</span>
       <span><b>배정 구역</b>${report.zone ? escapeHtml(report.zone) : "미배정"}</span>
@@ -194,11 +480,16 @@ function renderDetail() {
       runAction(report.report_no, { action: "confirm_payment" });
     });
   }
+  if (isPendingTransfer) {
+    $("#confirm-transfer-btn")?.addEventListener("click", () => {
+      runAction(report.report_no, { action: "confirm_transfer" });
+    });
+  }
 
   if (report.status === "REJECTED" || report.status === "COLLECTED") return;
 
   $("#assign-request").addEventListener("click", () => {
-    if (isPendingCash && !confirm("⚠️ 아직 현금 수납이 확인되지 않은 건입니다.\n수납 확인 전에 수거구역을 먼저 배정하시겠습니까?")) {
+    if ((isPendingCash || isPendingTransfer) && !confirm("⚠️ 아직 입금·수납이 확인되지 않은 건입니다.\n확인 전에 수거구역을 먼저 배정하시겠습니까?")) {
       return;
     }
     runAction(report.report_no, { action: "assign", zone: $("#assign-zone").value, assignee: $("#assign-name").value });
@@ -227,8 +518,10 @@ async function runAction(reportNo, payload) {
     const filtered = getFiltered();
     const nextUnassigned = payload.action === "assign" ? filtered.find((candidate) => candidate.status === "RECEIVED" && candidate.report_no !== reportNo) : null;
     state.selected = nextUnassigned ? nextUnassigned.report_no : reportNo;
+    renderClusters();
     renderList();
     renderDetail();
+    renderReportMap();
     $("#list-status").textContent = payload.action === "assign" ? (nextUnassigned ? "배정을 완료하고 다음 미배정 건으로 이동했습니다." : "배정을 완료했습니다.") : "처리를 완료했습니다.";
   } catch (error) {
     message.textContent = error.message;
@@ -246,6 +539,7 @@ async function loadReports({ quiet = false, keepDetail = false } = {}) {
     if (Array.isArray(data.zones) && data.zones.length) state.zones = data.zones;
     renderMetrics(state.allReports);
     renderZoneCounts(state.allReports);
+    refreshClusters({ keepSelection: keepDetail });
     renderList();
     renderReportMap();
     if (!keepDetail) renderDetail();
@@ -255,9 +549,9 @@ async function loadReports({ quiet = false, keepDetail = false } = {}) {
 }
 
 function setupReception() {
-  $("#request-search").addEventListener("input", debounce(() => { state.filters.q = $("#request-search").value; renderList(); }, 200));
-  $("#status-filter").addEventListener("change", () => { state.filters.status = $("#status-filter").value; renderList(); });
-  $("#payment-filter")?.addEventListener("change", () => { state.filters.payment = $("#payment-filter").value; renderList(); });
+  $("#request-search").addEventListener("input", debounce(() => { state.filters.q = $("#request-search").value; renderList(); renderReportMap(); }, 200));
+  $("#status-filter").addEventListener("change", () => { state.filters.status = $("#status-filter").value; renderList(); renderReportMap(); });
+  $("#payment-filter")?.addEventListener("change", () => { state.filters.payment = $("#payment-filter").value; renderList(); renderReportMap(); });
   $("#zone-reset").addEventListener("click", () => { state.filters.zone = ""; renderZoneCounts(state.allReports); renderList(); renderReportMap(); });
   document.querySelectorAll(".zone-chip").forEach((marker) => marker.addEventListener("click", () => {
     state.filters.zone = state.filters.zone === marker.dataset.zone ? "" : marker.dataset.zone;
@@ -267,6 +561,21 @@ function setupReception() {
   setupStaffMap();
   loadReports();
   setInterval(() => loadReports({ quiet: true, keepDetail: true }), 30000);
+  connectFleetSync({
+    role: "staff",
+    pollMs: 4000,
+    onSnapshot(snapshot) {
+      applyFleetSnapshot(snapshot);
+      const status = $("#fleet-sync-status");
+      if (status) {
+        const online = (snapshot.devices || []).filter((device) => device.online).length;
+        status.textContent = `실시간 동기화 · 온라인 ${online}/3 · 마지막 갱신 ${formatLastSeen(new Date().toISOString())}`;
+      }
+    },
+    onEvent() {
+      loadReports({ quiet: true, keepDetail: true });
+    }
+  });
 }
 
 async function loadVerification() {
@@ -294,10 +603,20 @@ function setupTabs() {
   document.querySelectorAll("[data-tab]").forEach((tab) => tab.addEventListener("click", () => {
     document.querySelectorAll("[data-tab]").forEach((other) => other.setAttribute("aria-selected", String(other === tab)));
     document.querySelectorAll(".staff-panel").forEach((panel) => { const active = panel.id === tab.dataset.tab; panel.hidden = !active; panel.classList.toggle("active", active); });
-    if (tab.dataset.tab === "reception") loadReports({ quiet: true, keepDetail: true });
+    if (tab.dataset.tab === "intake") refreshOfficeIntake();
+    if (tab.dataset.tab === "reception") {
+      loadReports({ quiet: true, keepDetail: true });
+      if (staffMap) setTimeout(() => staffMap.invalidateSize(), 80);
+    }
+    if (tab.dataset.tab === "stats") renderIntakeStats(state.allReports);
     if (tab.dataset.tab === "field") loadFieldQueue();
     if (tab.dataset.tab === "verify") loadVerification();
   }));
+  const requestedTab = new URLSearchParams(location.search).get("tab") || location.hash.replace(/^#/, "");
+  if (requestedTab) {
+    const button = document.querySelector(`[data-tab="${requestedTab}"]`);
+    if (button) button.click();
+  }
 }
 
 function fieldMessage(message) { $("#field-message").textContent = message; }
@@ -349,17 +668,6 @@ function updateFieldTaskMap(report, userCoords) {
   } else {
     fieldTaskMap.setView(JECHEON_CENTER, 13);
   }
-}
-
-function calculateDistanceMeters(lat1, lon1, lat2, lon2) {
-  const R = 6371000;
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLon = (lon2 - lon1) * Math.PI / 180;
-  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-            Math.sin(dLon / 2) * Math.sin(dLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return Math.round(R * c);
 }
 
 function renderFieldEmpty(message) {
@@ -641,4 +949,4 @@ $("#after-photo-input").addEventListener("change", async (event) => {
 
 $("#refresh-verification").addEventListener("click", () => { loadVerification(); $("#refresh-verification").textContent = "방금 검증했습니다"; });
 
-setupReception(); setupTabs();
+setupReception(); setupTabs(); setupOfficeIntake({ onReportsChanged: () => loadReports({ quiet: true, keepDetail: true }) });

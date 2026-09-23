@@ -7,6 +7,7 @@ import {
   sendJson,
   ZONES
 } from "../lib/supabase.js";
+import { assigneeFilterValues } from "../lib/fleet.js";
 
 export default async function handler(req, res) {
   if (req.method === "GET") {
@@ -23,6 +24,7 @@ async function handleGet(req, res) {
   const status = url.searchParams.get("status") || undefined;
   const zone = url.searchParams.get("zone") || undefined;
   const assignee = url.searchParams.get("assignee") || undefined;
+  const deviceId = url.searchParams.get("deviceId") || undefined;
   const q = url.searchParams.get("q")?.trim() || undefined;
 
   try {
@@ -33,14 +35,20 @@ async function handleGet(req, res) {
           report_no, status, payment_method, payment_status,
           address, address_detail, latitude, longitude,
           zone, assignee, memo, before_photo, after_photo,
-          total_fee, created_at, updated_at,
+          total_fee, created_at, updated_at, citizen_name, citizen_phone, channel,
           report_items ( name, option_name, quantity, unit_fee )
         `)
         .order("created_at", { ascending: false });
 
       if (status) query = query.eq("status", status);
       if (zone) query = query.eq("zone", zone);
-      if (assignee) query = query.eq("assignee", assignee);
+      if (deviceId) {
+        const values = assigneeFilterValues(deviceId);
+        if (!values.length) return sendJson(res, 200, { reports: [], zones: ZONES });
+        query = query.in("assignee", values);
+      } else if (assignee) {
+        query = query.eq("assignee", assignee);
+      }
       if (q) {
         query = query.or(
           `report_no.ilike.%${q}%,address.ilike.%${q}%,address_detail.ilike.%${q}%`
@@ -64,14 +72,22 @@ async function handleGet(req, res) {
     const params = [];
     if (status) { clauses.push("status = ?"); params.push(status); }
     if (zone) { clauses.push("zone = ?"); params.push(zone); }
-    if (assignee) { clauses.push("assignee = ?"); params.push(assignee); }
+    if (deviceId) {
+      const values = assigneeFilterValues(deviceId);
+      if (!values.length) return sendJson(res, 200, { reports: [], zones: ZONES });
+      clauses.push(`assignee IN (${values.map(() => "?").join(",")})`);
+      params.push(...values);
+    } else if (assignee) {
+      clauses.push("assignee = ?");
+      params.push(assignee);
+    }
     if (q) {
       clauses.push("(report_no LIKE ? OR address LIKE ? OR address_detail LIKE ?)");
       const like = `%${q}%`;
       params.push(like, like, like);
     }
     const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
-    const reportSelect = "SELECT report_no, status, payment_method, payment_status, address, address_detail, latitude, longitude, zone, assignee, memo, before_photo, after_photo, total_fee, created_at, updated_at FROM reports";
+    const reportSelect = "SELECT report_no, status, payment_method, payment_status, address, address_detail, latitude, longitude, zone, assignee, memo, before_photo, after_photo, total_fee, created_at, updated_at, citizen_name, citizen_phone, channel FROM reports";
     const reports = db.prepare(`${reportSelect} ${where} ORDER BY created_at DESC`).all(...params);
     const items = db.prepare("SELECT report_no, name, option_name, quantity, unit_fee FROM report_items").all();
     const itemsByReport = new Map();
@@ -89,7 +105,7 @@ async function handleGet(req, res) {
 async function handlePost(req, res) {
   try {
     const body = await parseBody(req);
-    const { address, addressDetail, paymentMethod, location, items, beforePhoto } = body;
+    const { address, addressDetail, paymentMethod, location, items, beforePhoto, channel: rawChannel, citizenName, citizenPhone } = body;
 
     const validItems =
       Array.isArray(items) &&
@@ -111,6 +127,13 @@ async function handlePost(req, res) {
       !validItems
     ) {
       return sendJson(res, 400, { error: "주소, 상세 장소, 결제수단, 품목을 확인해 주세요." });
+    }
+
+    const channel = rawChannel === "PHONE" ? "PHONE" : "WEB";
+    const name = typeof citizenName === "string" ? citizenName.trim().slice(0, 80) : "";
+    const phone = typeof citizenPhone === "string" ? citizenPhone.trim().slice(0, 40) : "";
+    if (channel === "PHONE" && (!name || !phone)) {
+      return sendJson(res, 400, { error: "신고자 이름과 연락처를 입력해 주세요." });
     }
 
     const latitude = Number.isFinite(location?.latitude) ? location.latitude : null;
@@ -139,7 +162,10 @@ async function handlePost(req, res) {
         before_photo: beforePhotoPath,
         total_fee: totalFee,
         created_at: createdAt,
-        updated_at: createdAt
+        updated_at: createdAt,
+        citizen_name: name || null,
+        citizen_phone: phone || null,
+        channel
       });
       if (reportError) throw reportError;
 
@@ -156,7 +182,7 @@ async function handlePost(req, res) {
       await supabase.from("audit_logs").insert({
         report_no: reportNo,
         action: "REPORT_CREATED",
-        actor_role: "CITIZEN",
+        actor_role: channel === "PHONE" ? "RECEPTION" : "CITIZEN",
         created_at: createdAt
       });
 
@@ -171,8 +197,9 @@ async function handlePost(req, res) {
         INSERT INTO reports (
           report_no, status, payment_method, payment_status,
           address, address_detail, latitude, longitude,
-          before_photo, total_fee, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          before_photo, total_fee, created_at, updated_at,
+          citizen_name, citizen_phone, channel
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         reportNo,
         "RECEIVED",
@@ -185,7 +212,10 @@ async function handlePost(req, res) {
         beforePhotoPath,
         totalFee,
         createdAt,
-        createdAt
+        createdAt,
+        name || null,
+        phone || null,
+        channel
       );
 
       const insertItem = db.prepare(
@@ -197,7 +227,7 @@ async function handlePost(req, res) {
 
       db.prepare(
         "INSERT INTO audit_logs (report_no, action, actor_role, created_at) VALUES (?, ?, ?, ?)"
-      ).run(reportNo, "REPORT_CREATED", "CITIZEN", createdAt);
+      ).run(reportNo, "REPORT_CREATED", channel === "PHONE" ? "RECEPTION" : "CITIZEN", createdAt);
 
       db.exec("COMMIT");
     } catch (error) {

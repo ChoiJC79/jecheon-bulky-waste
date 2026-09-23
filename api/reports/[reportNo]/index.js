@@ -21,7 +21,7 @@ export default async function handler(req, res) {
           report_no, status, payment_method, payment_status,
           address, address_detail, latitude, longitude,
           zone, assignee, memo, before_photo, after_photo,
-          total_fee, created_at, updated_at,
+          total_fee, created_at, updated_at, citizen_name, citizen_phone, channel,
           report_items ( name, option_name, quantity, unit_fee )
         `)
         .eq("report_no", decodedNo)
@@ -41,7 +41,7 @@ export default async function handler(req, res) {
 
     // SQLite Fallback
     const db = getLocalDb();
-    const reportSelect = "SELECT report_no, status, payment_method, payment_status, address, address_detail, latitude, longitude, zone, assignee, memo, before_photo, after_photo, total_fee, created_at, updated_at FROM reports";
+    const reportSelect = "SELECT report_no, status, payment_method, payment_status, address, address_detail, latitude, longitude, zone, assignee, memo, before_photo, after_photo, total_fee, created_at, updated_at, citizen_name, citizen_phone, channel FROM reports";
     const report = db.prepare(`${reportSelect} WHERE report_no = ?`).get(decodedNo);
     if (!report) return sendJson(res, 404, { error: "접수번호를 확인해 주세요." });
 

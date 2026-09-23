@@ -34,30 +34,189 @@
         </span>
         <span>대형 폐기물 접수 관리</span>
       </a>
-      <div class="network-label"><span></span> 내부 행정망 전용 · 시범 화면</div>
+      <div class="network-label"><span></span> 외부망 · 전화접수 운영 · 사무실 PC</div>
       <div style="display:flex;align-items:center;gap:10px;">
-        <a href="tablet.html" class="button outline" style="padding:6px 14px;font-size:13px;text-decoration:none;border-radius:8px;background:#e6f5ec;color:#107c41;border-color:#6ee7b7;font-weight:800;display:inline-flex;align-items:center;gap:6px;">📱 현장 수거 태블릿 모드</a>
-        <button type="button" class="profile">김담당 <small>접수 담당자</small></button>
+        <a href="tablet.html" class="button outline" style="padding:6px 14px;font-size:13px;text-decoration:none;border-radius:8px;background:#e6f5ec;color:#107c41;border-color:#6ee7b7;font-weight:800;display:inline-flex;align-items:center;gap:6px;">🚜 현장 수거 태블릿</a>
+        <button type="button" class="profile">김담당 <small>사무실 접수 담당자</small></button>
       </div>
     </header>
     <main class="staff-main">
       <section class="staff-intro">
-        <div><h1>오늘의 수거 업무를<br /><em>한 눈에 확인해요.</em></h1></div>
-        <p>신고 건을 검토하고, 수거구역을 배정하며, 현장 처리와 데이터 정합성을 관리해요.</p>
+        <div><h1>전화로 받은 신고를<br /><em>사무실에서 접수해요.</em></h1></div>
+        <p>시민 웹 폼으로 보내지 않고, 전화 내용을 입력한 뒤 자동이체 입금을 확인하고 1호차·2호차·예비 안드로이드 태블릿으로 바로 보냅니다. 가까운 미배정 건은 접수·배정 탭에서 묶어 배정할 수 있어요.</p>
       </section>
       <div class="role-tabs" role="tablist" aria-label="업무 역할">
-        <button role="tab" aria-selected="true" data-tab="reception">접수·배정</button>
+        <button role="tab" aria-selected="true" data-tab="intake">전화 접수</button>
+        <button role="tab" aria-selected="false" data-tab="reception">접수·배정</button>
+        <button role="tab" aria-selected="false" data-tab="stats">접수 통계</button>
         <button role="tab" aria-selected="false" data-tab="field">현장 처리</button>
         <button role="tab" aria-selected="false" data-tab="verify">데이터 검증</button>
       </div>
 
-      <section class="staff-panel active" id="reception" role="tabpanel">
+      <section class="staff-panel active" id="intake" role="tabpanel">
+        <aside class="office-path-banner" aria-label="사무실과 현장 구분">
+          <div>
+            <strong>사무실 PC 전용 전화 접수</strong>
+            <p>시민에게 공개 웹 신고 화면을 안내하지 않습니다. 품목·위치·사진·수수료를 여기서 입력하고, 자동이체 입금을 확인한 다음 1호차·2호차·예비 태블릿으로 보냅니다. 새올과 연결하지 않으며 외부망만 사용합니다.</p>
+          </div>
+          <a href="tablet.html" class="button outline">현장 태블릿 열기</a>
+        </aside>
+        <section class="work-card fleet-board" id="fleet-board" aria-labelledby="fleet-title">
+          <div class="section-head">
+            <h2 id="fleet-title">현장 안드로이드 태블릿 3대</h2>
+            <p>1호차 · 2호차 · 예비. 전송하면 해당 기기만 바로 받습니다. 전체 배정(__ALL__)은 쓰지 않습니다. 위치는 작업 건을 열 때만 쓰고, 상시 추적하지 않습니다.</p>
+          </div>
+          <p class="list-status" id="fleet-sync-status" role="status">태블릿 연결 대기</p>
+          <div class="fleet-device-grid" id="fleet-device-grid"></div>
+        </section>
+        <section class="work-card intake-stats-strip-card" aria-labelledby="intake-stats-strip-title">
+          <div class="section-head">
+            <h2 id="intake-stats-strip-title">오늘 접수 한눈에</h2>
+            <p>전화접수 건수·입금·미배정·현장 이슈입니다. 접수가 들어오거나 태블릿으로 보내면 바로 바뀝니다. 자세한 내역은 접수 통계 탭을 보세요.</p>
+          </div>
+          <div class="intake-stats-strip" id="intake-stats-strip"></div>
+        </section>
+        <ol class="office-steps progress-steps" id="office-steps" aria-label="사무실 전화 접수 절차">
+          <li class="is-current" data-office-step="1"><span>1</span>접수 입력</li>
+          <li data-office-step="2"><span>2</span>자동이체 확인</li>
+          <li data-office-step="3"><span>3</span>담당자에게 전송</li>
+        </ol>
+
+        <section class="work-card office-step-panel" id="office-step-1">
+          <div class="section-head">
+            <h2>전화로 받은 대형폐기물 신고</h2>
+            <p>통화 중 들은 신고자, 품목, 배출 위치, 사진을 입력합니다. 수수료는 제천시 폐기물관리 조례 별표 1 기준이며 결제수단은 자동이체입니다. 목록에 없는 품목은 수기 입력합니다.</p>
+          </div>
+          <form id="intake-form" novalidate>
+            <div class="intake-grid">
+              <label>신고자 이름
+                <input id="intake-citizen-name" type="text" autocomplete="name" placeholder="예: 홍길동" required />
+              </label>
+              <label>연락처
+                <input id="intake-citizen-phone" type="tel" autocomplete="tel" placeholder="예: 010-1234-5678" required />
+              </label>
+            </div>
+            <p class="selection-label">자주 듣는 품목</p>
+            <div class="quick-chips" id="intake-quick-chips"></div>
+            <label class="search-box intake-search" for="intake-item-search">
+              <span class="icon" aria-hidden="true">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7" /><line x1="21" y1="21" x2="16.6" y2="16.6" /></svg>
+              </span>
+              <input id="intake-item-search" type="search" placeholder="조례 품목 검색 예: 쇼파, 장롱, 냉장고" autocomplete="off" />
+            </label>
+            <aside class="intake-pay-note" id="intake-excluded-hint" hidden></aside>
+            <div class="intake-item-row">
+              <label>분류<select id="intake-category"></select></label>
+              <label>품목<select id="intake-item"></select></label>
+              <label>규격·수수료<select id="intake-option"></select></label>
+              <label>수량<input id="intake-qty" type="number" min="1" value="1" /></label>
+              <button class="button secondary" type="button" id="intake-add-item">품목 추가</button>
+            </div>
+            <details class="intake-custom" id="intake-custom-box" open>
+              <summary>목록에 없으면 수기 입력</summary>
+              <p>조례 품목에 없거나 규격이 다른 가구는 품목명·규격·수량·수수료를 직접 적어 추가합니다. 마스터 목록에 없어도 접수됩니다.</p>
+              <div class="intake-item-row">
+                <label>수기 품목명<input id="intake-custom-name" type="text" placeholder="예: 접이식 책상, 파손 냉장고" /></label>
+                <label>규격<input id="intake-custom-option" type="text" placeholder="예: 유사 일반책상, 분해됨" /></label>
+                <label>수량<input id="intake-custom-qty" type="number" min="1" value="1" /></label>
+                <label>수수료(원)<input id="intake-custom-fee" type="number" min="0" step="100" placeholder="예: 5000" /></label>
+                <button class="button outline" type="button" id="intake-add-custom">수기 품목 추가</button>
+              </div>
+            </details>
+            <ul class="intake-cart" id="intake-cart"></ul>
+            <p class="intake-fee-line">예상 수수료 <strong id="intake-fee-total">0원</strong></p>
+            <div class="intake-grid">
+              <label>배출 주소
+                <input id="intake-address" type="text" placeholder="제천시 주소" required />
+              </label>
+              <label>상세 장소
+                <input id="intake-address-detail" type="text" placeholder="예: 현관 앞, 분리수거장" required />
+              </label>
+            </div>
+            <p class="selection-label">시범 주소로 빠르게 입력</p>
+            <div class="quick-chips" id="intake-address-presets"></div>
+            <div id="intake-map" class="intake-map" aria-label="전화 접수 배출 위치 지도"></div>
+            <p class="card-note" id="intake-map-note">지도를 누르면 배출 좌표가 저장됩니다. 좌표가 없어도 접수는 가능합니다.</p>
+            <div class="modal-photo-field">
+              <input type="file" id="intake-photo-input" accept="image/*" hidden />
+              <button type="button" class="button outline" id="intake-photo-btn">배출 사진 첨부 (선택)</button>
+              <div id="intake-photo-preview" class="photo-preview" hidden>
+                <img id="intake-photo-img" alt="전화 접수 시 첨부한 배출 사진" />
+                <button type="button" id="intake-photo-del" aria-label="사진 삭제">×</button>
+              </div>
+            </div>
+            <aside class="intake-pay-note">
+              <strong>결제수단: 자동이체 (계좌이체)</strong>
+              <p>시범 화면에서는 실제 은행·PG 연계가 없습니다. 입금 여부는 다음 단계에서 담당자가 확인합니다. 계좌 비밀번호나 카드번호는 받지 않습니다.</p>
+            </aside>
+            <p class="form-message" id="intake-message"></p>
+            <div class="step-nav-row">
+              <button class="button primary" type="submit" id="intake-submit">전화 접수 등록</button>
+              <button class="button outline" type="button" id="office-goto-confirm">입금 대기 건 보기</button>
+            </div>
+          </form>
+        </section>
+
+        <section class="work-card office-step-panel" id="office-step-2" hidden>
+          <div class="section-head">
+            <h2>자동이체 입금 확인</h2>
+            <p>시범용 확인입니다. 은행 전산이나 결제대행사를 조회하지 않으며, 입금 금액만 대조한 뒤 확인 처리하세요.</p>
+          </div>
+          <aside class="intake-pay-note">
+            <strong>시범 입금 안내</strong>
+            <p>제천시 대형폐기물 시범 계좌는 화면에 실계좌를 두지 않습니다. 담당자가 통장·이체내역을 보고 금액이 맞으면 아래 버튼으로 확인하세요. 카드번호·계좌 비밀번호는 입력·저장하지 않습니다.</p>
+          </aside>
+          <div id="transfer-report-summary" class="office-summary"></div>
+          <label>입금자명 (화면 확인용, 저장하지 않음)
+            <input id="transfer-depositor" type="text" placeholder="통장에 보이는 입금자명" autocomplete="off" />
+          </label>
+          <p class="form-message" id="transfer-message"></p>
+          <div class="step-nav-row">
+            <button class="button outline" type="button" id="office-goto-intake">접수 입력으로</button>
+            <button class="button primary" type="button" id="transfer-confirm-btn">자동이체 입금 확인</button>
+          </div>
+          <div class="card-heading" style="margin-top:22px;"><div><h2>입금 대기 목록</h2></div></div>
+          <div id="transfer-queue"></div>
+        </section>
+
+        <section class="work-card office-step-panel" id="office-step-3" hidden>
+          <div class="section-head">
+            <h2>담당자 태블릿으로 전송</h2>
+            <p>입금이 확인된 건만 1호차·2호차·예비 태블릿으로 보냅니다. 보낸 기기는 새로고침 없이 목록이 바로 갱신됩니다.</p>
+          </div>
+          <div id="dispatch-report-summary" class="office-summary"></div>
+          <div class="intake-grid">
+            <label>수거구역<select id="dispatch-zone"></select></label>
+          </div>
+          <p class="selection-label">보낼 태블릿</p>
+          <div class="fleet-device-grid" id="dispatch-device-grid"></div>
+          <p class="form-message" id="dispatch-message"></p>
+          <div class="step-nav-row">
+            <button class="button outline" type="button" id="office-goto-dispatch">입금 확인으로</button>
+            <button class="button primary" type="button" id="dispatch-send-btn">선택한 태블릿으로 전송</button>
+          </div>
+          <p class="card-note"><a href="tablet.html" id="dispatch-tablet-link" hidden>현장 태블릿에서 방금 보낸 건 확인</a></p>
+        </section>
+      </section>
+
+      <section class="staff-panel" id="reception" role="tabpanel" hidden>
         <div class="metric-grid" id="metric-grid">
           <article><small>오늘 접수</small><strong>–</strong><span>불러오는 중…</span></article>
           <article class="attention"><small>미배정</small><strong>–</strong><span>불러오는 중…</span></article>
           <article><small>배정완료</small><strong>–</strong><span>불러오는 중…</span></article>
           <article><small>처리 지연</small><strong>–</strong><span>불러오는 중…</span></article>
         </div>
+        <section class="work-card nearby-clusters" id="nearby-clusters" aria-labelledby="cluster-title">
+          <div class="card-heading">
+            <div>
+              <h2 id="cluster-title">가까운 신고 묶음</h2>
+              <p class="cluster-rule" id="cluster-rule">추천 규칙: 좌표가 있는 미배정(접수) 건만 대상으로, 직선거리 300m 이내로 이어진 2건 이상을 한 묶음으로 보여 줍니다. 이미 배정된 인근 건은 같은 담당자에게 맞출 참고용입니다. 수거 기사 위치는 수집하지 않으며, 신고에 저장된 배출 좌표만 사용합니다.</p>
+            </div>
+            <span class="cluster-count" id="cluster-count"></span>
+          </div>
+          <p class="list-status" id="cluster-status" role="status"></p>
+          <div id="cluster-list"></div>
+        </section>
         <div class="work-grid">
           <section class="work-card request-list">
             <div class="card-heading">
@@ -82,6 +241,7 @@
               <select id="payment-filter" aria-label="결제 필터">
                 <option value="">전체 결제</option>
                 <option value="PENDING_CASH_RECEIPT">현금수납대기</option>
+                <option value="PENDING_TRANSFER">계좌입금대기</option>
                 <option value="COMPLETED">결제완료</option>
               </select>
             </div>
@@ -96,6 +256,48 @@
           </section>
         </div>
         <section class="detail-drawer" id="request-detail" aria-live="polite"><p>왼쪽 목록에서 신고 건을 선택하면 품목, 위치, 결제 상태를 확인하고 수거구역을 배정하거나 보완요청·반려를 처리할 수 있어요.</p></section>
+      </section>
+
+      <section class="staff-panel" id="stats" role="tabpanel" hidden>
+        <section class="work-card intake-stats" id="intake-stats" aria-labelledby="stats-title">
+          <div class="card-heading">
+            <div>
+              <h2 id="stats-title">전화접수 내역 통계</h2>
+              <p class="cluster-rule">사무실 전화접수 운영용입니다. 새올과 연결하지 않으며, 이미 불러온 접수 목록으로 바로 집계합니다. 접수·입금·전송·수거 상태가 바뀌면 이 숫자도 같이 갱신됩니다. 카드번호·계좌 비밀번호·상시 위치는 쓰지 않습니다.</p>
+            </div>
+            <span class="cluster-count" id="stats-status">집계 대기</span>
+          </div>
+          <div class="metric-grid stats-metric-grid" id="stats-metric-grid"></div>
+          <div class="stats-pipeline" id="stats-pipeline"></div>
+          <div class="stats-grid">
+            <article class="stats-panel">
+              <h3>처리 상태</h3>
+              <div class="stat-bars" id="stats-by-status"></div>
+            </article>
+            <article class="stats-panel">
+              <h3>입금·결제</h3>
+              <div class="stat-bars" id="stats-by-payment"></div>
+            </article>
+            <article class="stats-panel">
+              <h3>수거구역</h3>
+              <div class="stat-bars" id="stats-by-zone"></div>
+            </article>
+            <article class="stats-panel">
+              <h3>태블릿</h3>
+              <div class="stat-bars" id="stats-by-tablet"></div>
+            </article>
+          </div>
+          <div class="stats-grid stats-grid-wide">
+            <article class="stats-panel">
+              <h3>최근 7일 접수</h3>
+              <div class="stat-day-chart" id="stats-by-day"></div>
+            </article>
+            <article class="stats-panel">
+              <h3>품목 (수량)</h3>
+              <div class="stat-bars" id="stats-by-item"></div>
+            </article>
+          </div>
+        </section>
       </section>
 
       <section class="staff-panel" id="field" role="tabpanel" hidden>
@@ -220,6 +422,6 @@
     </dialog>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     <script src="photo.js"></script>
-    <script src="staff.js"></script>
+    <script type="module" src="staff.js"></script>
   </body>
 </html>
