@@ -612,6 +612,11 @@ function setupTabs() {
     if (tab.dataset.tab === "field") loadFieldQueue();
     if (tab.dataset.tab === "verify") loadVerification();
   }));
+  const requestedTab = new URLSearchParams(location.search).get("tab") || location.hash.replace(/^#/, "");
+  if (requestedTab) {
+    const button = document.querySelector(`[data-tab="${requestedTab}"]`);
+    if (button) button.click();
+  }
 }
 
 function fieldMessage(message) { $("#field-message").textContent = message; }

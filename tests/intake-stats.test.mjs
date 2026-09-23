@@ -125,4 +125,5 @@ test("관리 페이지는 접수 통계 영역과 실시간 갱신을 포함한�
   assert.match(app, /buildIntakeStats/);
   assert.match(app, /renderIntakeStats/);
   assert.match(app, /from "\.\/intake-stats\.js"/);
+  assert.match(app, /URLSearchParams\(location\.search\)\.get\("tab"\)/);
 });
