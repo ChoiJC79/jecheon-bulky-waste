@@ -8,6 +8,7 @@ import {
 } from "./nearby-clusters.js";
 import { setupOfficeIntake, refreshOfficeIntake, applyFleetSnapshot } from "./office-intake.js";
 import { connectFleetSync, formatLastSeen } from "./fleet-sync.js";
+import { barPercent, buildIntakeStats } from "./intake-stats.js";
 
 const capturePhoto = (...args) => globalThis.capturePhoto(...args);
 
@@ -71,20 +72,91 @@ function getFiltered() {
 }
 
 function renderMetrics(all) {
-  const todayStr = new Date().toISOString().slice(0, 10);
-  const today = all.filter((report) => report.created_at.slice(0, 10) === todayStr).length;
-  const unassigned = all.filter((report) => report.status === "RECEIVED").length;
-  const pendingPay = all.filter((report) => report.payment_status === "PENDING_CASH_RECEIPT" || report.payment_status === "PENDING_TRANSFER").length;
-  const assigned = all.filter((report) => report.status === "ASSIGNED").length;
-  const attentionCount = all.filter((report) => ["UNCOLLECTED", "CHANGE_REQUESTED", "SUPPLEMENT_REQUESTED"].includes(report.status)).length;
+  const stats = buildIntakeStats(all);
   const cards = [
-    ["오늘 접수", today, `전체 ${all.length}건 중`, false],
-    ["입금·수납대기", pendingPay, pendingPay ? "자동이체 또는 현금 수납 확인이 필요합니다." : "대기 건이 없습니다.", pendingPay > 0],
-    ["미배정", unassigned, "수거구역 배정이 필요합니다.", unassigned > 0],
-    ["배정완료", assigned, "수거 예정으로 전달되었습니다.", false],
-    ["확인 필요", attentionCount, attentionCount ? "미수거·현장변경 건 확인이 필요합니다." : "확인 건이 없습니다.", attentionCount > 0]
+    ["오늘 접수", stats.todayCount, `전화 ${stats.todayPhoneCount}건 · 전체 ${stats.totalCount}건`, false],
+    ["입금·수납대기", stats.pendingPaymentCount, stats.pendingPaymentCount ? `${won.format(stats.pendingPaymentFee)}원 확인이 필요합니다.` : "대기 건이 없습니다.", stats.pendingPaymentCount > 0],
+    ["미배정", stats.unassignedCount, "수거구역·태블릿 배정이 필요합니다.", stats.unassignedCount > 0],
+    ["배정완료", stats.assignedCount, "1호차·2호차·예비로 전달되었습니다.", false],
+    ["미수거·변경", stats.fieldIssueCount, stats.fieldIssueCount ? "현장에서 돌아온 건을 확인해 주세요." : "확인 건이 없습니다.", stats.fieldIssueCount > 0]
   ];
-  $("#metric-grid").innerHTML = cards.map(([label, value, note, attention]) => `<article class="${attention ? "attention" : ""}"><small>${label}</small><strong>${value}</strong><span>${escapeHtml(note)}</span></article>`).join("");
+  const grid = $("#metric-grid");
+  if (grid) grid.innerHTML = cards.map(([label, value, note, attention]) => `<article class="${attention ? "attention" : ""}"><small>${label}</small><strong>${value}</strong><span>${escapeHtml(note)}</span></article>`).join("");
+  renderIntakeStats(all, stats);
+}
+
+function renderStatBars(selector, rows, { empty = "아직 집계할 접수가 없습니다." } = {}) {
+  const node = $(selector);
+  if (!node) return;
+  const max = Math.max(0, ...rows.map((row) => row.count || 0));
+  if (!rows.length) {
+    node.innerHTML = `<p class="intake-empty">${empty}</p>`;
+    return;
+  }
+  node.innerHTML = rows.map((row) => {
+    const label = row.label || row.name || row.key;
+    const count = row.count ?? row.quantity ?? 0;
+    const width = barPercent(count, max);
+    const fee = Number.isFinite(row.fee) ? `<small>${won.format(row.fee)}원</small>` : "";
+    return `<div class="stat-bar-row"><span>${escapeHtml(label)}</span><span class="stat-bar-track" aria-hidden="true"><i style="width:${width}%"></i></span><b>${count}${fee}</b></div>`;
+  }).join("");
+}
+
+function renderIntakeStats(all, prepared) {
+  const stats = prepared || buildIntakeStats(all);
+  const strip = $("#intake-stats-strip");
+  if (strip) {
+    const cells = [
+      ["오늘 전화접수", stats.todayPhoneCount, `${won.format(stats.feeToday)}원`],
+      ["입금 대기", stats.pendingPaymentCount, stats.pendingPaymentCount ? `${won.format(stats.pendingPaymentFee)}원` : "대기 없음"],
+      ["미배정", stats.unassignedCount, "태블릿 전송 전"],
+      ["현장 수거 중", stats.assignedCount, "1·2호차·예비"],
+      ["미수거·변경", stats.fieldIssueCount, stats.fieldIssueCount ? "확인 필요" : "없음"]
+    ];
+    strip.innerHTML = cells.map(([label, value, note]) => `<article class="${Number(value) > 0 && (label === "입금 대기" || label === "미수거·변경" || label === "미배정") ? "attention" : ""}"><small>${label}</small><strong>${value}</strong><span>${escapeHtml(note)}</span></article>`).join("");
+  }
+
+  const metric = $("#stats-metric-grid");
+  if (metric) {
+    const cards = [
+      ["전체 접수", stats.totalCount, `전화 ${stats.phoneCount}건`],
+      ["오늘 접수", stats.todayCount, `${won.format(stats.feeToday)}원`],
+      ["수수료 합계", `${won.format(stats.feeTotal)}원`, `수거완료 ${won.format(stats.collectedFee)}원`],
+      ["입금 완료", stats.paidCount, `대기 ${stats.pendingPaymentCount}건`],
+      ["미수거", stats.uncollectedCount, "현장 미수거"],
+      ["변경요청", stats.changeRequestedCount, "접수처 확인"]
+    ];
+    metric.innerHTML = cards.map(([label, value, note]) => `<article><small>${label}</small><strong>${value}</strong><span>${escapeHtml(note)}</span></article>`).join("");
+  }
+
+  const pipeline = $("#stats-pipeline");
+  if (pipeline) {
+    const steps = [
+      ["입금 대기", stats.pipeline.waitingDeposit],
+      ["전송 대기", stats.pipeline.waitingDispatch],
+      ["현장 수거", stats.pipeline.inField],
+      ["수거완료", stats.pipeline.done]
+    ];
+    pipeline.innerHTML = steps.map(([label, value], index) => `<div><small>${index + 1}. ${label}</small><strong>${value}</strong></div>`).join("");
+  }
+
+  const status = $("#stats-status");
+  if (status) status.textContent = `방금 집계 · ${stats.totalCount}건`;
+
+  renderStatBars("#stats-by-status", stats.byStatus);
+  renderStatBars("#stats-by-payment", stats.byPayment);
+  renderStatBars("#stats-by-zone", stats.byZone);
+  renderStatBars("#stats-by-tablet", stats.byTablet.map((row) => ({ ...row, count: row.count, fee: row.fee })));
+  renderStatBars("#stats-by-item", stats.byItem.map((row) => ({ ...row, count: row.quantity, label: row.name })), { empty: "품목 집계가 없습니다." });
+
+  const days = $("#stats-by-day");
+  if (days) {
+    const max = Math.max(0, ...stats.byDay.map((row) => row.count));
+    days.innerHTML = stats.byDay.map((row) => {
+      const height = row.count ? Math.max(10, barPercent(row.count, max)) : 4;
+      return `<div class="stat-day-col"><span class="stat-day-bar" style="height:${height}%"></span><b>${row.count}</b><small>${escapeHtml(row.day.slice(5).replace("-", "/"))}</small></div>`;
+    }).join("");
+  }
 }
 
 function renderZoneCounts(all) {
@@ -536,6 +608,7 @@ function setupTabs() {
       loadReports({ quiet: true, keepDetail: true });
       if (staffMap) setTimeout(() => staffMap.invalidateSize(), 80);
     }
+    if (tab.dataset.tab === "stats") renderIntakeStats(state.allReports);
     if (tab.dataset.tab === "field") loadFieldQueue();
     if (tab.dataset.tab === "verify") loadVerification();
   }));

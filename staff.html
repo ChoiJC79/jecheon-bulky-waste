@@ -48,6 +48,7 @@
       <div class="role-tabs" role="tablist" aria-label="업무 역할">
         <button role="tab" aria-selected="true" data-tab="intake">전화 접수</button>
         <button role="tab" aria-selected="false" data-tab="reception">접수·배정</button>
+        <button role="tab" aria-selected="false" data-tab="stats">접수 통계</button>
         <button role="tab" aria-selected="false" data-tab="field">현장 처리</button>
         <button role="tab" aria-selected="false" data-tab="verify">데이터 검증</button>
       </div>
@@ -67,6 +68,13 @@
           </div>
           <p class="list-status" id="fleet-sync-status" role="status">태블릿 연결 대기</p>
           <div class="fleet-device-grid" id="fleet-device-grid"></div>
+        </section>
+        <section class="work-card intake-stats-strip-card" aria-labelledby="intake-stats-strip-title">
+          <div class="section-head">
+            <h2 id="intake-stats-strip-title">오늘 접수 한눈에</h2>
+            <p>전화접수 건수·입금·미배정·현장 이슈입니다. 접수가 들어오거나 태블릿으로 보내면 바로 바뀝니다. 자세한 내역은 접수 통계 탭을 보세요.</p>
+          </div>
+          <div class="intake-stats-strip" id="intake-stats-strip"></div>
         </section>
         <ol class="office-steps progress-steps" id="office-steps" aria-label="사무실 전화 접수 절차">
           <li class="is-current" data-office-step="1"><span>1</span>접수 입력</li>
@@ -230,6 +238,48 @@
           </section>
         </div>
         <section class="detail-drawer" id="request-detail" aria-live="polite"><p>왼쪽 목록에서 신고 건을 선택하면 품목, 위치, 결제 상태를 확인하고 수거구역을 배정하거나 보완요청·반려를 처리할 수 있어요.</p></section>
+      </section>
+
+      <section class="staff-panel" id="stats" role="tabpanel" hidden>
+        <section class="work-card intake-stats" id="intake-stats" aria-labelledby="stats-title">
+          <div class="card-heading">
+            <div>
+              <h2 id="stats-title">전화접수 내역 통계</h2>
+              <p class="cluster-rule">사무실 전화접수 운영용입니다. 새올과 연결하지 않으며, 이미 불러온 접수 목록으로 바로 집계합니다. 접수·입금·전송·수거 상태가 바뀌면 이 숫자도 같이 갱신됩니다. 카드번호·계좌 비밀번호·상시 위치는 쓰지 않습니다.</p>
+            </div>
+            <span class="cluster-count" id="stats-status">집계 대기</span>
+          </div>
+          <div class="metric-grid stats-metric-grid" id="stats-metric-grid"></div>
+          <div class="stats-pipeline" id="stats-pipeline"></div>
+          <div class="stats-grid">
+            <article class="stats-panel">
+              <h3>처리 상태</h3>
+              <div class="stat-bars" id="stats-by-status"></div>
+            </article>
+            <article class="stats-panel">
+              <h3>입금·결제</h3>
+              <div class="stat-bars" id="stats-by-payment"></div>
+            </article>
+            <article class="stats-panel">
+              <h3>수거구역</h3>
+              <div class="stat-bars" id="stats-by-zone"></div>
+            </article>
+            <article class="stats-panel">
+              <h3>태블릿</h3>
+              <div class="stat-bars" id="stats-by-tablet"></div>
+            </article>
+          </div>
+          <div class="stats-grid stats-grid-wide">
+            <article class="stats-panel">
+              <h3>최근 7일 접수</h3>
+              <div class="stat-day-chart" id="stats-by-day"></div>
+            </article>
+            <article class="stats-panel">
+              <h3>품목 (수량)</h3>
+              <div class="stat-bars" id="stats-by-item"></div>
+            </article>
+          </div>
+        </section>
       </section>
 
       <section class="staff-panel" id="field" role="tabpanel" hidden>
